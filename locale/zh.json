@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Scrapling 爬虫台",
+    "description": "在侧边栏设置 URL、选择器与抓取模式，实时查看日志、页面、条目和正文。"
+  }
+}

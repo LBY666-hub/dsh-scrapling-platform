@@ -1,0 +1,62 @@
+{
+  "name": "dsh-scrapling-platform",
+  "version": "1.0.0",
+  "description": "Native Scrapling sidebar panel for DeepSeek Harness: set parameters by hand, watch crawls live, collect pages, items, text and images.",
+  "type": "module",
+  "license": "MIT",
+  "author": "LBY666-hub",
+  "homepage": "https://github.com/LBY666-hub/dsh-scrapling-platform#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LBY666-hub/dsh-scrapling-platform.git"
+  },
+  "bugs": {
+    "url": "https://github.com/LBY666-hub/dsh-scrapling-platform/issues"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "scrapling",
+    "scraping",
+    "crawler",
+    "spider",
+    "sidebar-panel",
+    "cordis"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "runner.py",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
+    }
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

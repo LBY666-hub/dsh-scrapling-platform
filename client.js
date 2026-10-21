@@ -1,0 +1,1274 @@
+window.__ModuleLoader__.load({
+	id: "dsh-scrapling-platform",
+	factory(require) {
+		const React = require("react");
+		const h = React.createElement;
+		const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+		const API = "/scrapling-api";
+
+		const C = {
+			bg: "var(--dsw-alias-bg-base)",
+			layer1: "var(--dsw-alias-bg-layer-1)",
+			layer2: "var(--dsw-alias-bg-layer-2)",
+			border: "var(--dsw-alias-border-l1)",
+			border2: "var(--dsw-alias-border-l2)",
+			text: "var(--dsw-alias-label-primary)",
+			sub: "var(--dsw-alias-label-secondary)",
+			brand: "var(--dsw-alias-brand-primary)",
+			ok: "var(--dsw-alias-state-success-primary)",
+			warn: "var(--dsw-alias-state-warn-primary)",
+			err: "var(--dsw-alias-state-error-primary)",
+			idle: "var(--dsw-alias-state-idle-primary)",
+		};
+
+		const card = {
+			background: C.layer1,
+			border: "1px solid " + C.border,
+			borderRadius: 14,
+			padding: 16,
+		};
+
+		const labelStyle = {
+			display: "block",
+			fontSize: 12,
+			fontWeight: 600,
+			color: C.sub,
+			marginBottom: 6,
+			letterSpacing: "0.02em",
+		};
+
+		const inputStyle = {
+			width: "100%",
+			boxSizing: "border-box",
+			height: 34,
+			padding: "0 10px",
+			fontSize: 13,
+			color: C.text,
+			background: C.bg,
+			border: "1px solid " + C.border2,
+			borderRadius: 8,
+			outline: "none",
+		};
+
+		const mono = 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace';
+
+		function statusTone(status) {
+			if (status === "running") return C.brand;
+			if (status === "done") return C.ok;
+			if (status === "error") return C.err;
+			if (status === "cancelled") return C.warn;
+			return C.idle;
+		}
+
+		function statusText(status) {
+			if (status === "running") return "运行中";
+			if (status === "done") return "已完成";
+			if (status === "error") return "失败";
+			if (status === "cancelled") return "已停止";
+			return "空闲";
+		}
+
+		function Pill(props) {
+			const tone = props.tone || C.idle;
+			return h(
+				"span",
+				{
+					style: {
+						display: "inline-flex",
+						alignItems: "center",
+						gap: 6,
+						height: 22,
+						padding: "0 9px",
+						borderRadius: 999,
+						fontSize: 11,
+						fontWeight: 600,
+						color: tone,
+						background: "color-mix(in srgb, " + tone + " 14%, transparent)",
+						border: "1px solid color-mix(in srgb, " + tone + " 32%, transparent)",
+						whiteSpace: "nowrap",
+					},
+				},
+				h("span", {
+					style: {
+						width: 6,
+						height: 6,
+						borderRadius: 999,
+						background: tone,
+						animation: props.pulse ? "scrapling-pulse 1.2s ease-in-out infinite" : "none",
+					},
+				}),
+				props.text,
+			);
+		}
+
+		function Icon(props) {
+			const size = props.size || 18;
+			const color = props.color || "currentColor";
+			return h(
+				"svg",
+				{
+					width: size,
+					height: size,
+					viewBox: "0 0 32 32",
+					fill: "none",
+					"aria-hidden": true,
+					style: { display: "block", flex: "none" },
+				},
+				h("g", {
+					stroke: color,
+					strokeWidth: 1.9,
+					strokeLinecap: "round",
+					strokeLinejoin: "round",
+				}, [
+					h("circle", { key: "c", cx: 16, cy: 16, r: 4.2 }),
+					h("path", { key: "p1", d: "M16 11.8V6M16 20.2V26M11.8 16H6M20.2 16H26" }),
+					h("path", { key: "p2", d: "M13 13 9 9M19 13l4-4M13 19l-4 4M19 19l4 4" }),
+				]),
+			);
+		}
+
+		/** Sidebar rail icon. Receives { size, active } from the sidebar owner. */
+		function SidebarIcon(props) {
+			const active = Boolean(props && props.active);
+			return h(
+				"span",
+				{
+					style: {
+						display: "flex",
+						alignItems: "center",
+						justifyContent: "center",
+						width: "100%",
+						height: "100%",
+						color: active ? C.brand : "inherit",
+					},
+				},
+				h(Icon, { size: (props && props.size) || 18 }),
+			);
+		}
+
+		function Field(props) {
+			return h(
+				"div",
+				{ style: { marginBottom: 12 } },
+				h("label", { style: labelStyle }, props.label),
+				props.children,
+				props.hint ? h("div", { style: { marginTop: 4, fontSize: 11, color: C.sub } }, props.hint) : null,
+			);
+		}
+
+		function TextInput(props) {
+			return h("input", {
+				type: "text",
+				value: props.value,
+				placeholder: props.placeholder,
+				onChange: (event) => props.onChange(event.target.value),
+				style: inputStyle,
+				spellCheck: false,
+			});
+		}
+
+		function Select(props) {
+			return h(
+				"select",
+				{
+					value: props.value,
+					onChange: (event) => props.onChange(event.target.value),
+					style: Object.assign({}, inputStyle, { cursor: "pointer" }),
+				},
+				props.options.map((option) =>
+					h("option", { key: option.value, value: option.value }, option.label),
+				),
+			);
+		}
+
+		function Toggle(props) {
+			return h(
+				"div",
+				{ style: { padding: "2px 0 6px" } },
+				h(
+					"label",
+					{
+						style: {
+							display: "flex",
+							alignItems: "center",
+							gap: 8,
+							fontSize: 12,
+							color: C.text,
+							cursor: "pointer",
+						},
+					},
+					h("input", {
+						type: "checkbox",
+						checked: Boolean(props.value),
+						onChange: (event) => props.onChange(event.target.checked),
+						style: { accentColor: C.brand, width: 14, height: 14, cursor: "pointer" },
+					}),
+					props.label,
+				),
+				props.hint
+					? h(
+							"div",
+							{ style: { marginLeft: 22, marginTop: 2, fontSize: 11, color: C.sub, lineHeight: 1.5 } },
+							props.hint,
+						)
+					: null,
+			);
+		}
+
+		function Button(props) {
+			const kind = props.kind || "ghost";
+			const base = {
+				height: 34,
+				padding: "0 14px",
+				borderRadius: 9,
+				fontSize: 13,
+				fontWeight: 600,
+				cursor: props.disabled ? "not-allowed" : "pointer",
+				opacity: props.disabled ? 0.5 : 1,
+				display: "inline-flex",
+				alignItems: "center",
+				justifyContent: "center",
+				gap: 6,
+				transition: "filter 120ms ease",
+			};
+			const kinds = {
+				primary: { background: C.brand, color: C.bg, border: "1px solid " + C.brand },
+				danger: { background: "transparent", color: C.err, border: "1px solid " + C.err },
+				ghost: { background: C.layer2, color: C.text, border: "1px solid " + C.border2 },
+			};
+			return h(
+				"button",
+				{
+					type: "button",
+					disabled: props.disabled,
+					onClick: props.onClick,
+					style: Object.assign(base, kinds[kind] || kinds.ghost),
+				},
+				props.children,
+			);
+		}
+
+		const STAGES = [
+			{ key: "launch", label: "启动" },
+			{ key: "fetch", label: "抓取" },
+			{ key: "parse", label: "解析" },
+			{ key: "done", label: "完成" },
+		];
+
+		const MODE_HINT = {
+			http: "直接下载 HTML，最快。页面内容靠 JS 生成时可能抓不到，那就换浏览器模式。",
+			browser: "开一个真浏览器渲染页面，能执行 JS、应付多数反爬。比 HTTP 慢，也吃内存。",
+			spider: "从入口页顺着链接继续抓，多页并发。只抓入口页就把「跟随页内链接」关掉。",
+		};
+
+		function Stepper(props) {
+			const status = props.status;
+			const stage = props.stage;
+			const activeIndex = STAGES.findIndex((item) => item.key === stage);
+			const failed = status === "error";
+			return h(
+				"div",
+				{ style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" } },
+				STAGES.map((item, index) => {
+					const reached = activeIndex >= index || status === "done";
+					const current = item.key === stage && status === "running";
+					const tone = failed && index === Math.max(activeIndex, 0) ? C.err : reached ? C.brand : C.idle;
+					return h(
+						"div",
+						{ key: item.key, style: { display: "flex", alignItems: "center", gap: 6 } },
+						h(
+							"div",
+							{
+								style: {
+									display: "flex",
+									alignItems: "center",
+									gap: 5,
+									padding: "3px 9px",
+									borderRadius: 999,
+									fontSize: 11,
+									fontWeight: 600,
+									color: reached ? tone : C.sub,
+									background: current ? "color-mix(in srgb, " + tone + " 14%, transparent)" : "transparent",
+									border: "1px solid " + (reached ? "color-mix(in srgb, " + tone + " 40%, transparent)" : C.border),
+								},
+							},
+							h("span", {
+								style: { width: 5, height: 5, borderRadius: 999, background: reached ? tone : C.idle },
+							}),
+							item.label,
+						),
+						index < STAGES.length - 1
+							? h("span", { style: { color: C.border2, fontSize: 11 } }, "→")
+							: null,
+					);
+				}),
+			);
+		}
+
+		function StatCard(props) {
+			return h(
+				"div",
+				{
+					style: {
+						flex: "1 1 0",
+						minWidth: 86,
+						padding: "10px 12px",
+						borderRadius: 10,
+						border: "1px solid " + C.border,
+						background: C.layer2,
+					},
+				},
+				h("div", { style: { fontSize: 11, color: C.sub, marginBottom: 2 } }, props.label),
+				h("div", { style: { fontSize: 18, fontWeight: 700, color: C.text, fontVariantNumeric: "tabular-nums" } }, props.value),
+			);
+		}
+
+		function Empty(props) {
+			return h(
+				"div",
+				{
+					style: {
+						padding: "36px 16px",
+						textAlign: "center",
+						color: C.sub,
+						fontSize: 12,
+						lineHeight: 1.7,
+					},
+				},
+				h(Icon, { size: 26, color: C.border2 }),
+				h("div", { style: { marginTop: 10 } }, props.text),
+			);
+		}
+
+		function DataTab(props) {
+			const job = props.job;
+			if (job.items && job.items.length) {
+				const columns = [];
+				for (const row of job.items.slice(0, 100)) {
+					for (const key of Object.keys(row || {})) {
+						if (!columns.includes(key) && columns.length < 6) columns.push(key);
+					}
+				}
+				return h(
+					"div",
+					{ style: { overflow: "auto", maxHeight: 420 } },
+					h(
+						"table",
+						{ style: { borderCollapse: "collapse", width: "100%", fontSize: 12 } },
+						h(
+							"thead",
+							null,
+							h(
+								"tr",
+								null,
+								columns.map((key) =>
+									h(
+										"th",
+										{
+											key,
+											style: {
+												position: "sticky",
+												top: 0,
+												background: C.layer2,
+												color: C.sub,
+												fontWeight: 600,
+												textAlign: "left",
+												padding: "7px 10px",
+												borderBottom: "1px solid " + C.border,
+												whiteSpace: "nowrap",
+											},
+										},
+										key,
+									),
+								),
+							),
+						),
+						h(
+							"tbody",
+							null,
+							job.items.slice(0, 100).map((row, index) =>
+								h(
+									"tr",
+									{ key: index, style: { borderBottom: "1px solid " + C.border } },
+									columns.map((key) =>
+										h(
+											"td",
+											{
+												key,
+												style: {
+													padding: "7px 10px",
+													color: C.text,
+													verticalAlign: "top",
+													maxWidth: 320,
+													overflow: "hidden",
+													textOverflow: "ellipsis",
+													whiteSpace: "nowrap",
+												},
+												title: String(row ? row[key] ?? "" : ""),
+											},
+											String(row ? row[key] ?? "" : ""),
+										),
+									),
+								),
+							),
+						),
+					),
+				);
+			}
+			if (job.hits && job.hits.length) {
+				return h(
+					"div",
+					{ style: { display: "flex", flexDirection: "column", gap: 6, maxHeight: 420, overflow: "auto" } },
+					job.hits.map((hit) =>
+						h(
+							"div",
+							{
+								key: hit.index,
+								style: {
+									display: "flex",
+									gap: 10,
+									padding: "8px 10px",
+									borderRadius: 8,
+									background: C.layer2,
+									border: "1px solid " + C.border,
+									fontSize: 12,
+								},
+							},
+							h("span", { style: { color: C.sub, fontFamily: mono, flex: "none" } }, "#" + hit.index),
+							h(
+								"span",
+								{ style: { color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
+								hit.text || "(空)",
+							),
+							hit.href
+								? h(
+										"span",
+										{
+											style: {
+												marginLeft: "auto",
+												color: C.brand,
+												fontSize: 11,
+												flex: "none",
+												maxWidth: 220,
+												overflow: "hidden",
+												textOverflow: "ellipsis",
+												whiteSpace: "nowrap",
+											},
+										},
+										hit.href,
+									)
+								: null,
+						),
+					),
+				);
+			}
+			return h(Empty, {
+				text: job.status === "running" ? "正在抓取，命中结果会实时出现在这里" : "还没有抓取结果。在上方填写参数后点「开始抓取」。",
+			});
+		}
+
+		function MarkdownTab(props) {
+			const text = props.job.markdown || "";
+			if (!text) return h(Empty, { text: "暂无正文。解析完成后，Markdown / 文本 / HTML 会显示在这里。" });
+			return h(
+				"div",
+				null,
+				h(
+					"div",
+					{ style: { display: "flex", justifyContent: "flex-end", marginBottom: 8 } },
+					h(
+						Button,
+						{
+							onClick: () => {
+								try {
+									navigator.clipboard.writeText(text);
+								} catch (error) {
+									/* ignore */
+								}
+							},
+						},
+						"复制全文",
+					),
+				),
+				h(
+					"pre",
+					{
+						style: {
+							margin: 0,
+							padding: 14,
+							maxHeight: 440,
+							overflow: "auto",
+							background: C.bg,
+							border: "1px solid " + C.border,
+							borderRadius: 10,
+							fontSize: 12,
+							lineHeight: 1.7,
+							color: C.text,
+							whiteSpace: "pre-wrap",
+							wordBreak: "break-word",
+						},
+					},
+					text,
+				),
+			);
+		}
+
+		function ImagesTab(props) {
+			const job = props.job;
+			const images = job.images || [];
+			const okImages = images.filter((image) => image.ok && image.name);
+			if (!images.length) {
+				return h(Empty, {
+					text: job.status === "running" ? "正在查找图片…" : "这次没有下载图片。勾选左侧「同时下载页面图片」再跑一次。",
+				});
+			}
+			const totalBytes = okImages.reduce((sum, image) => sum + (image.bytes || 0), 0);
+			return h(
+				"div",
+				null,
+				h(
+					"div",
+					{
+						style: {
+							display: "flex",
+							alignItems: "center",
+							gap: 8,
+							marginBottom: 10,
+							fontSize: 11.5,
+							color: C.sub,
+							flexWrap: "wrap",
+						},
+					},
+					h("span", null, `已下载 ${okImages.length} 张，共 ${(totalBytes / 1024).toFixed(0)} KB`),
+					job.downloadDir
+						? h(
+								"button",
+								{
+									type: "button",
+									onClick: () => {
+										try {
+											navigator.clipboard.writeText(job.downloadDir);
+										} catch (error) {
+											/* ignore */
+										}
+									},
+									style: {
+										border: "1px solid " + C.border,
+										background: C.layer2,
+										color: C.text,
+										borderRadius: 7,
+										padding: "3px 8px",
+										fontSize: 11,
+										cursor: "pointer",
+										maxWidth: 420,
+										overflow: "hidden",
+										textOverflow: "ellipsis",
+										whiteSpace: "nowrap",
+									},
+									title: "点击复制保存路径",
+								},
+								"保存到：" + job.downloadDir,
+							)
+						: null,
+				),
+				h(
+					"div",
+					{
+						style: {
+							display: "grid",
+							gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))",
+							gap: 8,
+							maxHeight: 420,
+							overflow: "auto",
+						},
+					},
+					images.map((image, index) =>
+						image.ok && image.name
+							? h(
+									"a",
+									{
+										key: index,
+										href: `${API}/file?job=${encodeURIComponent(job.id)}&name=${encodeURIComponent(image.name)}`,
+										target: "_blank",
+										rel: "noreferrer",
+										style: {
+											display: "block",
+											border: "1px solid " + C.border,
+											borderRadius: 9,
+											overflow: "hidden",
+											background: C.layer2,
+											textDecoration: "none",
+										},
+										title: image.url,
+									},
+									h("img", {
+										src: `${API}/file?job=${encodeURIComponent(job.id)}&name=${encodeURIComponent(image.name)}`,
+										alt: "",
+										loading: "lazy",
+										style: { display: "block", width: "100%", height: 88, objectFit: "cover" },
+									}),
+									h(
+										"div",
+										{
+											style: {
+												padding: "4px 6px",
+												fontSize: 10,
+												color: C.sub,
+												overflow: "hidden",
+												textOverflow: "ellipsis",
+												whiteSpace: "nowrap",
+											},
+										},
+										`${(image.bytes / 1024).toFixed(0)} KB · ${image.name}`,
+									),
+								)
+							: h(
+									"div",
+									{
+										key: index,
+										style: {
+											padding: "8px",
+											borderRadius: 9,
+											border: "1px solid color-mix(in srgb, " + C.err + " 30%, transparent)",
+											background: "color-mix(in srgb, " + C.err + " 8%, transparent)",
+											fontSize: 10.5,
+											color: C.err,
+											overflow: "hidden",
+										},
+										title: image.url + "\n" + (image.err || ""),
+									},
+									"下载失败",
+									h(
+										"div",
+										{
+											style: {
+												marginTop: 4,
+												color: C.sub,
+												overflow: "hidden",
+												textOverflow: "ellipsis",
+												whiteSpace: "nowrap",
+											},
+										},
+										image.url,
+									),
+								),
+					),
+				),
+			);
+		}
+
+		function PagesTab(props) {
+			const pages = props.job.pages || [];
+			if (!pages.length) return h(Empty, { text: "还没有访问记录。" });
+			return h(
+				"div",
+				{ style: { display: "flex", flexDirection: "column", gap: 6, maxHeight: 420, overflow: "auto" } },
+				pages.map((page, index) =>
+					h(
+						"div",
+						{
+							key: index,
+							style: {
+								display: "flex",
+								alignItems: "center",
+								gap: 10,
+								padding: "8px 10px",
+								borderRadius: 8,
+								background: C.layer2,
+								border: "1px solid " + C.border,
+								fontSize: 12,
+							},
+						},
+						h(
+							"span",
+							{
+								style: {
+									flex: "none",
+									fontFamily: mono,
+									fontSize: 11,
+									padding: "1px 6px",
+									borderRadius: 5,
+									color: page.status >= 400 ? C.err : C.ok,
+									background: "color-mix(in srgb, " + (page.status >= 400 ? C.err : C.ok) + " 12%, transparent)",
+								},
+							},
+							page.status || "—",
+						),
+						h(
+							"span",
+							{
+								style: {
+									color: C.text,
+									overflow: "hidden",
+									textOverflow: "ellipsis",
+									whiteSpace: "nowrap",
+								},
+								title: page.url,
+							},
+							page.url,
+						),
+						page.ms
+							? h("span", { style: { marginLeft: "auto", color: C.sub, flex: "none" } }, page.ms + " ms")
+							: null,
+					),
+				),
+			);
+		}
+
+		function LogTab(props) {
+			const logs = props.job.logs || [];
+			return h(
+				"div",
+				{
+					ref: props.scrollRef,
+					style: {
+						maxHeight: 420,
+						overflow: "auto",
+						background: C.bg,
+						border: "1px solid " + C.border,
+						borderRadius: 10,
+						padding: "10px 12px",
+						fontFamily: mono,
+						fontSize: 11.5,
+						lineHeight: 1.75,
+						color: C.sub,
+					},
+				},
+				logs.length
+					? logs.map((item, index) =>
+							h(
+								"div",
+								{ key: index },
+								h("span", { style: { color: C.border2 } }, new Date(item.ts).toLocaleTimeString()),
+								"  ",
+								h("span", { style: { color: C.text } }, item.msg),
+							),
+						)
+					: h("div", null, "等待任务启动…"),
+			);
+		}
+
+		function Panel() {
+			const [form, setForm] = useState({
+				url: "",
+				mode: "http",
+				selector: "",
+				output: "markdown",
+				timeout: 30,
+				headless: true,
+				solveCloudflare: false,
+				networkIdle: false,
+				waitSelector: "",
+				proxy: "",
+				maxPages: 5,
+				follow: false,
+				concurrency: 4,
+				images: false,
+				imageLimit: 20,
+			});
+			const [job, setJob] = useState(null);
+			const [env, setEnv] = useState(null);
+			const [notice, setNotice] = useState(null);
+			const [starting, setStarting] = useState(false);
+			const [tab, setTab] = useState("data");
+			const logRef = useRef(null);
+
+			const patch = useCallback((key, value) => {
+				setForm((current) => Object.assign({}, current, { [key]: value }));
+			}, []);
+
+			const refresh = useCallback(async () => {
+				try {
+					const response = await fetch(API + "/state", { cache: "no-store" });
+					const data = await response.json();
+					if (data && data.job) setJob(data.job);
+				} catch (error) {
+					/* transient */
+				}
+			}, []);
+
+			useEffect(() => {
+				let alive = true;
+				fetch(API + "/env", { cache: "no-store" })
+					.then((response) => response.json())
+					.then((data) => {
+						if (alive) setEnv(data);
+					})
+					.catch(() => {});
+				refresh();
+				return () => {
+					alive = false;
+				};
+			}, [refresh]);
+
+			const running = job && job.status === "running";
+
+			useEffect(() => {
+				if (!running) return undefined;
+				const timer = setInterval(refresh, 700);
+				return () => clearInterval(timer);
+			}, [running, refresh]);
+
+			useEffect(() => {
+				if (tab !== "log" || !logRef.current) return;
+				logRef.current.scrollTop = logRef.current.scrollHeight;
+			}, [job && job.logs ? job.logs.length : 0, tab]);
+
+			const start = async () => {
+				setStarting(true);
+				setNotice(null);
+				try {
+					const response = await fetch(API + "/run", {
+						method: "POST",
+						headers: { "content-type": "application/json" },
+						body: JSON.stringify(form),
+					});
+					const data = await response.json();
+					if (!response.ok || (data && data.error)) {
+						setNotice({ kind: "error", text: (data && data.error) || "启动失败" });
+					} else {
+						setTab("data");
+						await refresh();
+					}
+				} catch (error) {
+					setNotice({ kind: "error", text: String(error && error.message ? error.message : error) });
+				} finally {
+					setStarting(false);
+				}
+			};
+
+			const stop = async () => {
+				try {
+					await fetch(API + "/cancel", { method: "POST" });
+					await refresh();
+				} catch (error) {
+					/* ignore */
+				}
+			};
+
+			const elapsed = job
+				? job.status === "running"
+					? Math.max(0, (Date.now() - job.startedAt) / 1000)
+					: job.stats && job.stats.elapsed
+						? job.stats.elapsed
+						: 0
+				: 0;
+
+			const envBad = env && (!env.pythonReady || !env.chromeReady);
+
+			const tabs = [
+				{ key: "data", label: job && job.items && job.items.length ? "数据 (" + job.items.length + ")" : "数据" },
+				{ key: "markdown", label: "正文" },
+			];
+			if (job && ((job.images && job.images.length) || (job.params && job.params.images))) {
+				tabs.push({ key: "images", label: "图片 (" + (job.images ? job.images.length : 0) + ")" });
+			}
+			tabs.push({ key: "pages", label: "页面" });
+			tabs.push({ key: "log", label: "日志" });
+
+			return h(
+				"div",
+				{
+					style: {
+						height: "100%",
+						overflow: "auto",
+						background: C.bg,
+						color: C.text,
+						padding: "20px 24px 40px",
+						boxSizing: "border-box",
+					},
+				},
+				h(
+					"div",
+					{ style: { maxWidth: 1180, margin: "0 auto" } },
+
+					h(
+						"div",
+						{
+							style: {
+								display: "flex",
+								alignItems: "center",
+								gap: 12,
+								flexWrap: "wrap",
+								marginBottom: 16,
+							},
+						},
+						h(
+							"div",
+							{
+								style: {
+									width: 36,
+									height: 36,
+									borderRadius: 10,
+									display: "flex",
+									alignItems: "center",
+									justifyContent: "center",
+									background: "color-mix(in srgb, " + C.brand + " 12%, transparent)",
+									color: C.brand,
+								},
+							},
+							h(Icon, { size: 20 }),
+						),
+						h(
+							"div",
+							null,
+							h("div", { style: { fontSize: 16, fontWeight: 700, lineHeight: 1.3 } }, "Scrapling 爬虫台"),
+							h(
+								"div",
+								{ style: { fontSize: 12, color: C.sub, marginTop: 2 } },
+								"设置参数 → 实时观察 → 拿结果",
+							),
+						),
+						h("div", { style: { flex: 1 } }),
+						Pill({ text: statusText(job ? job.status : "idle"), tone: statusTone(job ? job.status : "idle"), pulse: running }),
+						env
+							? h(Pill, {
+									text: envBad ? (env.pythonReady ? "Chrome 未找到" : "Python 未找到") : "环境就绪",
+									tone: envBad ? C.warn : C.ok,
+								})
+							: null,
+					),
+
+					notice
+						? h(
+								"div",
+								{
+									style: {
+										marginBottom: 12,
+										padding: "9px 12px",
+										borderRadius: 9,
+										fontSize: 12,
+										color: C.err,
+										background: "color-mix(in srgb, " + C.err + " 10%, transparent)",
+										border: "1px solid color-mix(in srgb, " + C.err + " 30%, transparent)",
+									},
+								},
+								notice.text,
+							)
+						: null,
+
+					h(
+						"div",
+						{ style: { display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" } },
+
+						// ---------- parameter form ----------
+						h(
+							"div",
+							{ style: Object.assign({}, card, { flex: "0 1 340px", minWidth: 300 }) },
+							h("div", { style: { fontSize: 13, fontWeight: 700, marginBottom: 12 } }, "抓取参数"),
+
+							h(
+								Field,
+								{ label: "目标 URL", hint: "要抓的页面地址。不写 http:// 会自动补上 https://。" },
+								h(TextInput, {
+									value: form.url,
+									placeholder: "https://example.com",
+									onChange: (value) => patch("url", value),
+								}),
+							),
+
+							h(
+								Field,
+								{ label: "抓取模式", hint: MODE_HINT[form.mode] || MODE_HINT.http },
+								h(Select, {
+									value: form.mode,
+									onChange: (value) => patch("mode", value),
+									options: [
+										{ value: "http", label: "HTTP 请求（快，静态页）" },
+										{ value: "browser", label: "隐身浏览器（JS / 反爬）" },
+										{ value: "spider", label: "整站爬取（多页并发）" },
+									],
+								}),
+							),
+
+							h(
+								Field,
+								{
+									label: "CSS 选择器",
+									hint: "留空 = 抓整页正文。填 .quote 抓所有这类元素；article h2 抓文章标题。",
+								},
+								h(TextInput, {
+									value: form.selector,
+									placeholder: ".quote 或 article h2",
+									onChange: (value) => patch("selector", value),
+								}),
+							),
+
+							h(
+								Field,
+								{ label: "输出格式", hint: "Markdown 给大模型读最省 token；纯文本去标签；HTML 保留原结构。" },
+								h(Select, {
+									value: form.output,
+									onChange: (value) => patch("output", value),
+									options: [
+										{ value: "markdown", label: "Markdown" },
+										{ value: "text", label: "纯文本" },
+										{ value: "html", label: "HTML" },
+									],
+								}),
+							),
+
+							h(
+								Field,
+								{ label: "超时(秒)", hint: "单次请求最多等多久，超时就判失败。抓大页面可调大。" },
+								h(TextInput, {
+									value: String(form.timeout),
+									onChange: (value) => patch("timeout", Number(value) || 0),
+								}),
+							),
+
+							h(Toggle, {
+								label: "同时下载页面图片",
+								hint: "抓页面里的 <img>（含懒加载 data-src），下载到本地并在这里预览。不支持整站模式。",
+								value: form.images,
+								onChange: (value) => patch("images", value),
+							}),
+							form.images
+								? h(
+										Field,
+										{ label: "最多下载张数", hint: "只取页面前 N 张，避免一次下太多。" },
+										h(TextInput, {
+											value: String(form.imageLimit),
+											onChange: (value) => patch("imageLimit", Number(value) || 1),
+										}),
+									)
+								: null,
+
+							form.mode === "browser"
+								? h(
+										"div",
+										{ style: { marginBottom: 10 } },
+										h(Toggle, {
+											label: "无头运行",
+											hint: "不弹出浏览器窗口，后台默默跑。想看渲染过程就关掉它。",
+											value: form.headless,
+											onChange: (value) => patch("headless", value),
+										}),
+										h(Toggle, {
+											label: "尝试过 Cloudflare",
+											hint: "遇到「正在验证您是否是真人」这类拦截页时，自动尝试通过。",
+											value: form.solveCloudflare,
+											onChange: (value) => patch("solveCloudflare", value),
+										}),
+										h(Toggle, {
+											label: "等待网络空闲",
+											hint: "等页面 0.5 秒没有新请求了再解析，适合慢慢加载的站。会变慢。",
+											value: form.networkIdle,
+											onChange: (value) => patch("networkIdle", value),
+										}),
+										h(
+											Field,
+											{
+												label: "等待选择器",
+												hint: "等到这个元素出现才开始解析，专治内容异步加载。留空 = 不等。",
+											},
+											h(TextInput, {
+												value: form.waitSelector,
+												placeholder: ".content",
+												onChange: (value) => patch("waitSelector", value),
+											}),
+										),
+									)
+								: null,
+
+							form.mode === "spider"
+								? h(
+										"div",
+										{ style: { marginBottom: 10 } },
+										h(
+											"div",
+											{ style: { display: "flex", gap: 10 } },
+											h(
+												"div",
+												{ style: { flex: 1 } },
+												h(
+													Field,
+													{ label: "最多页数", hint: "这次最多访问几个页面，防火墙试水先设小一点。" },
+													h(TextInput, {
+														value: String(form.maxPages),
+														onChange: (value) => patch("maxPages", Number(value) || 1),
+													}),
+												),
+											),
+											h(
+												"div",
+												{ style: { flex: 1 } },
+												h(
+													Field,
+													{ label: "并发数", hint: "同时发几个请求。太大容易被限流或封 IP。" },
+													h(TextInput, {
+														value: String(form.concurrency),
+														onChange: (value) => patch("concurrency", Number(value) || 1),
+													}),
+												),
+											),
+										),
+										h(Toggle, {
+											label: "跟随页内链接",
+											hint: "打开才会从当前页继续找链接往下抓；关掉就只抓入口这一页。",
+											value: form.follow,
+											onChange: (value) => patch("follow", value),
+										}),
+									)
+								: null,
+
+							h(
+								Field,
+								{
+									label: "代理（可选）",
+									hint: "需要换出口 IP 时填 http://user:pass@host:port，留空直连。",
+								},
+								h(TextInput, {
+									value: form.proxy,
+									placeholder: "留空 = 直连",
+									onChange: (value) => patch("proxy", value),
+								}),
+							),
+
+							h(
+								"div",
+								{ style: { display: "flex", gap: 8, marginTop: 16 } },
+								h(
+									Button,
+									{ kind: "primary", onClick: start, disabled: starting || running || !form.url.trim() },
+									starting ? "启动中…" : "开始抓取",
+								),
+								h(Button, { kind: "danger", onClick: stop, disabled: !running }, "停止"),
+							),
+						),
+
+						// ---------- visualization ----------
+						h(
+							"div",
+							{ style: Object.assign({}, card, { flex: "1 1 560px", minWidth: 320 }) },
+
+							h(
+								"div",
+								{
+									style: {
+										display: "flex",
+										alignItems: "center",
+										justifyContent: "space-between",
+										gap: 12,
+										flexWrap: "wrap",
+										marginBottom: 12,
+									},
+								},
+								h("div", { style: { fontSize: 13, fontWeight: 700 } }, "运行看板"),
+								h(Stepper, { stage: job ? job.stage : "launch", status: job ? job.status : "idle" }),
+							),
+
+							h(
+								"div",
+								{ style: { display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" } },
+								h(StatCard, { label: "页面", value: (job && job.pages ? job.pages.length : job && job.stats ? job.stats.pages : 0) }),
+								h(StatCard, { label: "条目", value: job && job.items ? job.items.length : job && job.stats ? job.stats.items : 0 }),
+								h(StatCard, { label: "命中", value: job ? job.hitsCount || (job.hits ? job.hits.length : 0) : 0 }),
+								h(StatCard, { label: "耗时", value: elapsed ? elapsed.toFixed(1) + "s" : "—" }),
+							),
+
+							h(
+								"div",
+								{
+									style: {
+										display: "flex",
+										gap: 4,
+										borderBottom: "1px solid " + C.border,
+										marginBottom: 12,
+									},
+								},
+								tabs.map((item) =>
+									h(
+										"button",
+										{
+											key: item.key,
+											type: "button",
+											onClick: () => setTab(item.key),
+											style: {
+												border: 0,
+												background: "transparent",
+												cursor: "pointer",
+												padding: "7px 10px",
+												fontSize: 12,
+												fontWeight: 600,
+												color: tab === item.key ? C.text : C.sub,
+												borderBottom: "2px solid " + (tab === item.key ? C.brand : "transparent"),
+												marginBottom: -1,
+											},
+										},
+										item.label,
+									),
+								),
+							),
+
+							job && job.error
+								? h(
+										"div",
+										{
+											style: {
+												marginBottom: 10,
+												padding: "9px 12px",
+												borderRadius: 9,
+												fontSize: 12,
+												color: C.err,
+												background: "color-mix(in srgb, " + C.err + " 10%, transparent)",
+												border: "1px solid color-mix(in srgb, " + C.err + " 30%, transparent)",
+												whiteSpace: "pre-wrap",
+											},
+										},
+										job.error,
+									)
+								: null,
+
+							job
+								? tab === "data"
+									? h(DataTab, { job })
+									: tab === "markdown"
+										? h(MarkdownTab, { job })
+										: tab === "images"
+											? h(ImagesTab, { job })
+											: tab === "pages"
+												? h(PagesTab, { job })
+												: h(LogTab, { job, scrollRef: logRef })
+								: h(Empty, {
+										text: "在左侧填好 URL 和选择器，点「开始抓取」。\n运行中会实时显示页面、条目、命中与日志。",
+									}),
+						),
+					),
+				),
+
+				h(
+					"style",
+					null,
+					"@keyframes scrapling-pulse { 0%,100% { opacity: 1 } 50% { opacity: 0.35 } }",
+				),
+			);
+		}
+
+		function apply(ctx) {
+			ctx.slots.inject("main", () =>
+				ctx.slots.register(
+					{
+						name: "main",
+						key: "scrapling",
+					},
+					Panel,
+				),
+			);
+			ctx.slots.inject("sidebar.panellist", () =>
+				ctx.slots.register(
+					{
+						name: "sidebar.panellist",
+						id: "scrapling",
+						order: 45,
+						label: "Scrapling 爬虫台",
+					},
+					SidebarIcon,
+				),
+			);
+		}
+
+		return { inject: ["slots"], apply };
+	},
+});

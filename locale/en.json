@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Scrapling Console",
+    "description": "Configure URL, selectors, and crawl mode from the sidebar, then watch logs, pages, items, and content live."
+  }
+}
