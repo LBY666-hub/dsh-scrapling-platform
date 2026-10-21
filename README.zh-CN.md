@@ -55,34 +55,64 @@ Scrapling  ──►  逐行输出 JSON  {t:"stage"|"log"|"page"|"item"|"image"|
 
 ## 安装
 
-1. 在插件默认寻找的位置建 venv —— `<DSH_HOME>/.venvs/scrapling`（Windows 为
-   `%DSH_HOME%\.venvs\scrapling`）—— 并安装 Scrapling：
+### 1. 拿到代码
 
-   ```bash
-   python -m venv "$DSH_HOME/.venvs/scrapling"
-   "$DSH_HOME/.venvs/scrapling/bin/pip" install "scrapling[ai,shell]"
-   ```
+```bash
+git clone https://github.com/LBY666-hub/dsh-scrapling-platform.git
+cd dsh-scrapling-platform
+```
 
-   想用别的解释器也行：在插件配置里填 `python`，或设环境变量 `SCRAPLING_PYTHON`。
+没装 Git？在仓库页面点 **Code → Download ZIP**，解压到任意目录即可。
 
-2. 在 DSH 里安装：打开「设置 → 插件」，选择从 npm 安装，填入 `dsh-scrapling-platform`，装好后启用。
+### 2. 作为一个 DSH 插件安装
 
-   > ⚠️ 不要在某个项目目录里手跑 `npm install` —— 那只会把包装进那个项目，DSH 根本不会加载它。插件必须装进 **DSH profile** 才会生效。
+打开 DSH 的 **设置 → 插件**，把刚下载的文件夹作为本地 bundle 添加
+（即 `link:<该文件夹的绝对路径>`）。如果你的 DSH 版本没有「本地目录安装」入口，
+可以直接让 DSH 助手把这个文件夹装成插件。
 
-   装不上时也可以用本地路径安装：把本仓库目录直接作为 bundle 装进 profile。
+> ⚠️ 不要在某个项目目录里手跑 `npm install` —— 那只会把包装进那个项目，
+> DSH 根本不会加载它。插件必须装进 **DSH profile** 才会生效。
 
-3. 可选配置——每项都有默认值，只改需要的：
+### 3. 准备 Python 环境
 
-   ```yaml
-   - id: dsh-scrapling-platform
-     name: dsh-scrapling-platform
-     config:
-       python: '/自定义/.venvs/scrapling/bin/python'   # 默认：<DSH_HOME>/.venvs/scrapling
-       chrome: '/自定义/chrome'                        # 默认自动探测；留空则用 Scrapling 自带 Chromium
-       downloadRoot: '/自定义/下载目录'                 # 默认：<DSH_HOME>/scrapling-downloads
-   ```
+在插件默认寻找的位置建 venv —— `<DSH_HOME>/.venvs/scrapling`（Windows 为
+`%DSH_HOME%\.venvs\scrapling`）—— 并安装 Scrapling：
 
-4. 重启 DSH，点左侧栏的蜘蛛图标。
+```bash
+python -m venv "$DSH_HOME/.venvs/scrapling"
+"$DSH_HOME/.venvs/scrapling/bin/pip" install "scrapling[ai,shell]"
+```
+
+想用别的解释器也行：在插件配置里填 `python`，或设环境变量 `SCRAPLING_PYTHON`。
+
+### 4. 可选配置
+
+每项都有默认值，只改需要的：
+
+```yaml
+- id: dsh-scrapling-platform
+  name: dsh-scrapling-platform
+  config:
+    python: '/自定义/.venvs/scrapling/bin/python'   # 默认：<DSH_HOME>/.venvs/scrapling
+    chrome: '/自定义/chrome'                        # 默认自动探测；留空则用 Scrapling 自带 Chromium
+    downloadRoot: '/自定义/下载目录'                 # 默认：<DSH_HOME>/scrapling-downloads
+```
+
+### 5. 重启并打开
+
+重启 DSH，点左侧栏的蜘蛛图标。
+
+## 快速上手
+
+1. 点左侧栏的蜘蛛图标。
+2. 填一个 URL，比如 `https://quotes.toscrape.com/`，模式保持 **HTTP**。
+3. 可选：在 **CSS 选择器** 里填 `.quote`，只保留名言块。
+4. 点 **开始抓取**。阶段条会依次走 `启动 → 抓取 → 解析 → 完成`，页面数和条目数实时变化，
+   **日志**页签会滚动显示抓取器正在做什么。
+5. 看结果：**数据**（命中的元素或整站条目）、**正文**（Markdown / 纯文本 / HTML）、
+   **图片**（勾了图片下载才有）、**页面**（访问过的每个 URL）。
+
+需要执行 JS 的页面把模式切到 **浏览器**；要一次抓多页切到 **整站**，再设「最多页数」和「并发数」。
 
 ## 用法
 

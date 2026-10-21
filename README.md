@@ -55,38 +55,68 @@ Key points:
 
 ## Install
 
-1. Create the venv the plugin looks for by default — `<DSH_HOME>/.venvs/scrapling`
-   (Windows: `%DSH_HOME%\.venvs\scrapling`) — and install Scrapling into it:
+### 1. Get the code
 
-   ```bash
-   python -m venv "$DSH_HOME/.venvs/scrapling"
-   "$DSH_HOME/.venvs/scrapling/bin/pip" install "scrapling[ai,shell]"
-   ```
+```bash
+git clone https://github.com/LBY666-hub/dsh-scrapling-platform.git
+cd dsh-scrapling-platform
+```
 
-   Any other interpreter works too: set `python` in the plugin config, or the
-   `SCRAPLING_PYTHON` environment variable.
+No Git? Use **Code → Download ZIP** on the repository page and unzip it anywhere.
 
-2. Install it inside DSH: open **Settings → Plugins**, choose install from npm, enter
-   `dsh-scrapling-platform`, then enable it.
+### 2. Install it as a DSH plugin
 
-   > ⚠️ Do not run `npm install` inside a project directory — that only puts the package
-   > into that project, and DSH will never load it. A plugin must be installed into the
-   > **DSH profile**.
+Open **Settings → Plugins** in DSH and add the folder you just downloaded as a local
+bundle (a `link:<absolute path to that folder>` spec). If your DSH build does not expose
+local-directory install, ask the DSH assistant to install that folder as a plugin.
 
-   If npm install is unavailable, install the bundle from this repository's directory instead.
+> ⚠️ Do not run `npm install` inside a project directory — that only puts the package
+> into that project, and DSH never loads it. A plugin must be installed into the
+> **DSH profile**.
 
-3. Optional config — every field has a working default, set only what you need:
+### 3. Prepare the Python environment
 
-   ```yaml
-   - id: dsh-scrapling-platform
-     name: dsh-scrapling-platform
-     config:
-       python: '/custom/path/.venvs/scrapling/bin/python'   # default: <DSH_HOME>/.venvs/scrapling
-       chrome: '/custom/path/to/chrome'                     # default: auto-detected; empty = use Scrapling's bundled Chromium
-       downloadRoot: '/custom/downloads'                    # default: <DSH_HOME>/scrapling-downloads
-   ```
+Create the venv the plugin looks for by default — `<DSH_HOME>/.venvs/scrapling`
+(Windows: `%DSH_HOME%\.venvs\scrapling`) — and install Scrapling into it:
 
-4. Restart DSH, then click the spider icon in the left rail.
+```bash
+python -m venv "$DSH_HOME/.venvs/scrapling"
+"$DSH_HOME/.venvs/scrapling/bin/pip" install "scrapling[ai,shell]"
+```
+
+Any other interpreter works too: set `python` in the plugin config, or the
+`SCRAPLING_PYTHON` environment variable.
+
+### 4. Optional config
+
+Every field has a working default; set only what you need:
+
+```yaml
+- id: dsh-scrapling-platform
+  name: dsh-scrapling-platform
+  config:
+    python: '/custom/path/.venvs/scrapling/bin/python'   # default: <DSH_HOME>/.venvs/scrapling
+    chrome: '/custom/path/to/chrome'                     # default: auto-detected; empty = use Scrapling's bundled Chromium
+    downloadRoot: '/custom/downloads'                    # default: <DSH_HOME>/scrapling-downloads
+```
+
+### 5. Restart and open
+
+Restart DSH, then click the spider icon in the left rail.
+
+## Quick start
+
+1. Click the spider icon in the left rail.
+2. Paste a URL, e.g. `https://quotes.toscrape.com/`, and keep mode **HTTP**.
+3. Optional: put `.quote` in **CSS selector** to keep only the quote blocks.
+4. Press **Start**. The stage bar moves `launch → fetch → parse → done`, page and item
+   counters update live, and the **Log** tab streams what the scraper is doing.
+5. Read the result: **Data** (matched elements or spider items), **Text** (Markdown /
+   plain text / HTML), **Images** if you enabled image download, **Pages** for every URL
+   hit.
+
+For JS-rendered pages switch mode to **Browser**; for several pages at once switch to
+**Spider** and set *Max pages* and *Concurrency*.
 
 ## Usage
 

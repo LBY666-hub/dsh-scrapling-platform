@@ -1,6 +1,6 @@
 {
   "name": "dsh-scrapling-platform",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Native Scrapling sidebar panel for DeepSeek Harness: set parameters by hand, watch crawls live, collect pages, items, text and images.",
   "type": "module",
   "license": "MIT",
