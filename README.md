@@ -66,11 +66,14 @@ Key points:
    Any other interpreter works too: set `python` in the plugin config, or the
    `SCRAPLING_PYTHON` environment variable.
 
-2. Install the plugin into your DSH profile (Plugins → install from npm, or a local path):
+2. Install it inside DSH: open **Settings → Plugins**, choose install from npm, enter
+   `dsh-scrapling-platform`, then enable it.
 
-   ```
-   npm install dsh-scrapling-platform
-   ```
+   > ⚠️ Do not run `npm install` inside a project directory — that only puts the package
+   > into that project, and DSH will never load it. A plugin must be installed into the
+   > **DSH profile**.
+
+   If npm install is unavailable, install the bundle from this repository's directory instead.
 
 3. Optional config — every field has a working default, set only what you need:
 

@@ -65,11 +65,11 @@ Scrapling  ──►  逐行输出 JSON  {t:"stage"|"log"|"page"|"item"|"image"|
 
    想用别的解释器也行：在插件配置里填 `python`，或设环境变量 `SCRAPLING_PYTHON`。
 
-2. 把插件装进 DSH（在「插件」里从 npm 安装，或用本地路径）：
+2. 在 DSH 里安装：打开「设置 → 插件」，选择从 npm 安装，填入 `dsh-scrapling-platform`，装好后启用。
 
-   ```
-   npm install dsh-scrapling-platform
-   ```
+   > ⚠️ 不要在某个项目目录里手跑 `npm install` —— 那只会把包装进那个项目，DSH 根本不会加载它。插件必须装进 **DSH profile** 才会生效。
+
+   装不上时也可以用本地路径安装：把本仓库目录直接作为 bundle 装进 profile。
 
 3. 可选配置——每项都有默认值，只改需要的：
 
