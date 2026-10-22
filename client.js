@@ -847,7 +847,10 @@ window.__ModuleLoader__.load({
 					{ label: "登录方式", hint: "扫码最省事：会弹出浏览器窗口，用 App 扫一下即可。" },
 					h(Select, {
 						value: form.loginType,
-						onChange: (value) => patch("loginType", value),
+						onChange: (value) => {
+							patch("loginType", value);
+							if (value === "qrcode") patch("headless", false);
+						},
 						options: [
 							{ value: "qrcode", label: "扫码登录" },
 							{ value: "cookie", label: "粘贴 Cookie" },
