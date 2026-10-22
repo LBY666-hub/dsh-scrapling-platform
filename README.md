@@ -97,7 +97,8 @@ Every field has a working default; set only what you need:
   config:
     python: '/custom/path/.venvs/scrapling/bin/python'   # default: <DSH_HOME>/.venvs/scrapling
     chrome: '/custom/path/to/chrome'                     # default: auto-detected; empty = use Scrapling's bundled Chromium
-    downloadRoot: '/custom/downloads'                    # default: <DSH_HOME>/scrapling-downloads
+    outputRoot: '/custom/output'                         # default: <DSH_HOME>/scrapling-downloads
+    mediacrawlerDir: '/path/to/MediaCrawler-main'        # required only for the MediaCrawler engine
 ```
 
 ### 5. Restart and open
@@ -146,6 +147,34 @@ The workbench drives two projects, switchable at the top of the form:
 
 MediaCrawler is licensed under **NON-COMMERCIAL LEARNING LICENSE 1.1** — read its LICENSE
 before use.
+
+## Where results go
+
+Every run writes a folder under `outputRoot`:
+
+```
+<outputRoot>/<engine>-<label>-<timestamp>/
+├── 正文.md | 正文.txt | 正文.html     # Scrapling: extracted content
+├── items.jsonl                       # matched items / spider rows
+├── meta.json                         # url, status, selector, counts, time
+└── images/                           # downloaded images (Scrapling)
+```
+
+MediaCrawler writes its own `*_contents_*.jsonl` (or csv/excel/sqlite, per the save option)
+into the same folder, and the panel parses JSONL into the Data table.
+
+## Parameters
+
+**Scrapling — basic**: URL, mode, CSS selector, output format, timeout, proxy, image download
+(+ count, selector). **Advanced** (inside the collapsible section): browser fingerprint,
+HTTP/3, retries and retry delay, custom headers, cookies, User-Agent, locale, timezone,
+skip resources, block ads, block WebRTC, canvas noise, Shadow DOM, real Chrome, wait for DOM,
+main-content-only, extra wait, and for Spider mode: max pages, concurrency, per-domain
+concurrency, download delay, robots.txt.
+
+**MediaCrawler**: platform, keywords, crawl type (search/detail/creator), IDs for
+detail/creator, login method (+ cookie), start page, comments / sub-comments / max comments,
+concurrency, save format, IP proxy (provider + pool size), headless.
 
 ## Usage
 

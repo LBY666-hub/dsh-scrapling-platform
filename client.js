@@ -911,8 +911,101 @@ window.__ModuleLoader__.load({
 
 				h(
 					"div",
-					{ style: { marginTop: 8, fontSize: 11, color: C.sub, lineHeight: 1.6 } },
-					"结果以 JSONL 写入任务目录，面板会解析成条目表格。",
+					{ style: { display: "flex", gap: 10 } },
+					h(
+						"div",
+						{ style: { flex: 1 } },
+						h(
+							Field,
+							{ label: "起始页", hint: "从第几页开始翻，配合限流跳页用。" },
+							h(TextInput, {
+								value: String(form.startPage),
+								onChange: (value) => patch("startPage", Number(value) || 1),
+							}),
+						),
+					),
+					h(
+						"div",
+						{ style: { flex: 1 } },
+						h(
+							Field,
+							{ label: "每篇评论数", hint: "每个内容最多抓多少条一级评论。" },
+							h(TextInput, {
+								value: String(form.maxComments),
+								onChange: (value) => patch("maxComments", Number(value) || 1),
+							}),
+						),
+					),
+				),
+
+				h(Toggle, {
+					label: "抓取二级评论",
+					hint: "回复楼中楼，数据更全但请求量翻倍。",
+					value: form.subComments,
+					onChange: (value) => patch("subComments", value),
+				}),
+
+				h(
+					Field,
+					{
+						label: "保存格式",
+						hint: "jsonl 才能解析成面板表格；csv/excel 适合直接打开看。",
+					},
+					h(Select, {
+						value: form.saveOption,
+						onChange: (value) => patch("saveOption", value),
+						options: [
+							{ value: "jsonl", label: "JSONL（面板可解析）" },
+							{ value: "json", label: "JSON" },
+							{ value: "csv", label: "CSV" },
+							{ value: "excel", label: "Excel" },
+							{ value: "sqlite", label: "SQLite" },
+						],
+					}),
+				),
+
+				h(Toggle, {
+					label: "启用 IP 代理",
+					hint: "需要先在 MediaCrawler 里配好代理服务商，否则会报错。",
+					value: form.ipProxy,
+					onChange: (value) => patch("ipProxy", value),
+				}),
+				form.ipProxy
+					? h(
+							"div",
+							{ style: { display: "flex", gap: 10 } },
+							h(
+								"div",
+								{ style: { flex: 1 } },
+								h(
+									Field,
+									{ label: "服务商", hint: "kuaidaili 或 wandouhttp。" },
+									h(TextInput, {
+										value: form.ipProxyProvider,
+										placeholder: "kuaidaili",
+										onChange: (value) => patch("ipProxyProvider", value),
+									}),
+								),
+							),
+							h(
+								"div",
+								{ style: { width: 100 } },
+								h(
+									Field,
+									{ label: "池大小", hint: "代理池数量。" },
+									h(TextInput, {
+										value: String(form.ipProxyCount),
+										onChange: (value) => patch("ipProxyCount", Number(value) || 0),
+									}),
+								),
+							),
+						)
+					: null,
+
+				h(
+					"div",
+					{ style: { marginTop: 10, fontSize: 11, color: C.sub, lineHeight: 1.6 } },
+					"结果保存到：" + ((env && env.outputRoot) || "（未配置）"),
 				),
 			);
 		}
@@ -935,12 +1028,42 @@ window.__ModuleLoader__.load({
 				concurrency: 4,
 				images: false,
 				imageLimit: 20,
+				impersonate: "chrome",
+				http3: false,
+				retries: 0,
+				retryDelay: 0,
+				headers: "",
+				cookies: "",
+				useragent: "",
+				locale: "",
+				timezoneId: "",
+				wait: 0,
+				disableResources: false,
+				blockAds: false,
+				blockWebrtc: false,
+				hideCanvas: false,
+				pierceShadow: false,
+				realChrome: false,
+				loadDom: true,
+				mainContentOnly: true,
+				imageSelector: "",
+				respectRobots: false,
+				downloadDelay: 0,
+				concurrencyPerDomain: 0,
 				platform: "xhs",
 				keywords: "",
 				crawlType: "search",
 				loginType: "qrcode",
-				cookies: "",
 				comments: false,
+				subComments: false,
+				maxComments: 10,
+				startPage: 1,
+				saveOption: "jsonl",
+				specifiedId: "",
+				creatorId: "",
+				ipProxy: false,
+				ipProxyProvider: "",
+				ipProxyCount: 0,
 			});
 			const [job, setJob] = useState(null);
 			const [env, setEnv] = useState(null);
@@ -1329,11 +1452,45 @@ window.__ModuleLoader__.load({
 												),
 											),
 										),
+										h(
+											"div",
+											{ style: { display: "flex", gap: 10 } },
+											h(
+												"div",
+												{ style: { flex: 1 } },
+												h(
+													Field,
+													{ label: "请求间隔(秒)", hint: "每个请求之间强制等待，礼貌抓取用。" },
+													h(TextInput, {
+														value: String(form.downloadDelay),
+														onChange: (value) => patch("downloadDelay", Number(value) || 0),
+													}),
+												),
+											),
+											h(
+												"div",
+												{ style: { flex: 1 } },
+												h(
+													Field,
+													{ label: "单域名并发", hint: "0 = 不限制，按总并发走。" },
+													h(TextInput, {
+														value: String(form.concurrencyPerDomain),
+														onChange: (value) => patch("concurrencyPerDomain", Number(value) || 0),
+													}),
+												),
+											),
+										),
 										h(Toggle, {
 											label: "跟随页内链接",
 											hint: "打开才会从当前页继续找链接往下抓；关掉就只抓入口这一页。",
 											value: form.follow,
 											onChange: (value) => patch("follow", value),
+										}),
+										h(Toggle, {
+											label: "遵守 robots.txt",
+											hint: "按目标站规则跳过禁止抓取的路径，合规优先时打开。",
+											value: form.respectRobots,
+											onChange: (value) => patch("respectRobots", value),
 										}),
 									)
 								: null,
@@ -1349,6 +1506,195 @@ window.__ModuleLoader__.load({
 									placeholder: "留空 = 直连",
 									onChange: (value) => patch("proxy", value),
 								}),
+							),
+
+							h(
+								"div",
+								{ style: { marginTop: 10, fontSize: 11, color: C.sub, lineHeight: 1.6 } },
+								"结果保存到：" + ((env && env.outputRoot) || "（未配置）"),
+							),
+
+							h(
+								"details",
+								{ style: { marginTop: 12, borderTop: "1px solid " + C.border, paddingTop: 10 } },
+								h(
+									"summary",
+									{ style: { cursor: "pointer", fontSize: 12.5, fontWeight: 600, color: C.text } },
+									"高级选项",
+								),
+								h(
+									Field,
+									{ label: "浏览器指纹", hint: "伪装成哪种浏览器发请求，换着试可以绕过部分风控。" },
+									h(Select, {
+										value: form.impersonate,
+										onChange: (value) => patch("impersonate", value),
+										options: [
+											{ value: "chrome", label: "Chrome（最新）" },
+											{ value: "chrome131", label: "Chrome 131" },
+											{ value: "safari", label: "Safari" },
+											{ value: "edge", label: "Edge" },
+											{ value: "firefox", label: "Firefox" },
+										],
+									}),
+								),
+								h(Toggle, {
+									label: "启用 HTTP/3",
+									hint: "走 QUIC 协议，部分站点更快；可能与指纹伪装冲突。",
+									value: form.http3,
+									onChange: (value) => patch("http3", value),
+								}),
+								h(
+									"div",
+									{ style: { display: "flex", gap: 10 } },
+									h(
+										"div",
+										{ style: { flex: 1 } },
+										h(
+											Field,
+											{ label: "重试次数", hint: "0 = 不重试。" },
+											h(TextInput, {
+												value: String(form.retries),
+												onChange: (value) => patch("retries", Number(value) || 0),
+											}),
+										),
+									),
+									h(
+										"div",
+										{ style: { flex: 1 } },
+										h(
+											Field,
+											{ label: "重试间隔(秒)", hint: "两次重试之间等多久。" },
+											h(TextInput, {
+												value: String(form.retryDelay),
+												onChange: (value) => patch("retryDelay", Number(value) || 0),
+											}),
+										),
+									),
+								),
+								h(
+									Field,
+									{ label: "自定义请求头", hint: 'JSON 对象，例如 {"Referer":"https://x.com"}。' },
+									h(TextArea, {
+										value: form.headers,
+										placeholder: '{"Accept-Language":"zh-CN"}',
+										rows: 3,
+										onChange: (value) => patch("headers", value),
+									}),
+								),
+								h(
+									Field,
+									{ label: "Cookie", hint: "key=value; key2=value2，需要登录态时用。" },
+									h(TextArea, {
+										value: form.cookies,
+										placeholder: "sessionid=...",
+										rows: 3,
+										onChange: (value) => patch("cookies", value),
+									}),
+								),
+								h(
+									Field,
+									{ label: "User-Agent", hint: "留空则按指纹自动生成。" },
+									h(TextInput, {
+										value: form.useragent,
+										placeholder: "留空自动",
+										onChange: (value) => patch("useragent", value),
+									}),
+								),
+								h(
+									"div",
+									{ style: { display: "flex", gap: 10 } },
+									h(
+										"div",
+										{ style: { flex: 1 } },
+										h(
+											Field,
+											{ label: "语言", hint: "如 zh-CN。" },
+											h(TextInput, {
+												value: form.locale,
+												placeholder: "zh-CN",
+												onChange: (value) => patch("locale", value),
+											}),
+										),
+									),
+									h(
+										"div",
+										{ style: { flex: 1 } },
+										h(
+											Field,
+											{ label: "时区", hint: "如 Asia/Shanghai。" },
+											h(TextInput, {
+												value: form.timezoneId,
+												placeholder: "Asia/Shanghai",
+												onChange: (value) => patch("timezoneId", value),
+											}),
+										),
+									),
+								),
+								h(
+									Field,
+									{ label: "图片选择器", hint: "只下某块区域里的图，留空 = 全页 <img>。" },
+									h(TextInput, {
+										value: form.imageSelector,
+										placeholder: ".gallery img",
+										onChange: (value) => patch("imageSelector", value),
+									}),
+								),
+								h(Toggle, {
+									label: "跳过图片/样式等资源",
+									hint: "只下 HTML，明显更快；页面布局可能异常。",
+									value: form.disableResources,
+									onChange: (value) => patch("disableResources", value),
+								}),
+								h(Toggle, {
+									label: "屏蔽广告与追踪",
+									hint: "拦掉约 3500 个广告域名，省流量也更快。",
+									value: form.blockAds,
+									onChange: (value) => patch("blockAds", value),
+								}),
+								h(Toggle, {
+									label: "禁止 WebRTC 泄露",
+									hint: "用代理时打开，防止真实 IP 暴露。",
+									value: form.blockWebrtc,
+									onChange: (value) => patch("blockWebrtc", value),
+								}),
+								h(Toggle, {
+									label: "Canvas 加噪",
+									hint: "干扰 Canvas 指纹，进一步降低被识别概率。",
+									value: form.hideCanvas,
+									onChange: (value) => patch("hideCanvas", value),
+								}),
+								h(Toggle, {
+									label: "穿透 Shadow DOM",
+									hint: "页面用 Web Components 时，打开才能选到内部元素。",
+									value: form.pierceShadow,
+									onChange: (value) => patch("pierceShadow", value),
+								}),
+								h(Toggle, {
+									label: "使用本机 Chrome",
+									hint: "不用自带 Chromium，直接拉起安装版 Chrome。",
+									value: form.realChrome,
+									onChange: (value) => patch("realChrome", value),
+								}),
+								h(Toggle, {
+									label: "等待 DOM 加载完成",
+									hint: "关闭可以更早拿到内容，但可能不完整。",
+									value: form.loadDom,
+									onChange: (value) => patch("loadDom", value),
+								}),
+								h(Toggle, {
+									label: "只取正文区域",
+									hint: "开启会去掉导航、页脚等噪音，适合喂给大模型。",
+									value: form.mainContentOnly,
+									onChange: (value) => patch("mainContentOnly", value),
+								}),
+								h(
+									Field,
+									{ label: "额外等待(毫秒)", hint: "浏览器模式下页面就绪后再等一会。" },
+									h(TextInput, {
+										value: String(form.wait),
+										onChange: (value) => patch("wait", Number(value) || 0),
+									}),
+								),
 							),
 
 							h(

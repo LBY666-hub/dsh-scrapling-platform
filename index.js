@@ -241,15 +241,24 @@ function startMediaCrawler(options, config) {
 		loginType: options.loginType || "qrcode",
 		headless: options.headless !== false,
 		comments: Boolean(options.comments),
+		subComments: Boolean(options.subComments),
+		maxComments: Number(options.maxComments) || 10,
 		concurrency: Number(options.concurrency) || 4,
+		startPage: Number(options.startPage) || 1,
+		saveOption: options.saveOption || "jsonl",
+		specifiedId: options.specifiedId || "",
+		creatorId: options.creatorId || "",
+		ipProxy: Boolean(options.ipProxy),
+		ipProxyProvider: options.ipProxyProvider || "",
+		ipProxyCount: Number(options.ipProxyCount) || 0,
 	};
 	const state = makeState(params);
 	state.id = id;
 	state.stage = "launch";
 
-	const workDir = join(config.downloadRoot, id);
+	let workDir = "";
 	try {
-		mkdirSync(workDir, { recursive: true });
+		workDir = makeJobDir(config.outputRoot, "mediacrawler", `${params.platform}-${keywords}`);
 		state.downloadDir = workDir;
 	} catch (error) {
 		return { error: `无法创建结果目录：${error.message}` };
@@ -265,8 +274,10 @@ function startMediaCrawler(options, config) {
 		params.crawlType,
 		"--keywords",
 		keywords,
+		"--start",
+		String(params.startPage),
 		"--save_data_option",
-		"jsonl",
+		params.saveOption,
 		"--save_data_path",
 		workDir,
 		"--headless",
@@ -275,8 +286,22 @@ function startMediaCrawler(options, config) {
 		String(params.concurrency),
 		"--get_comment",
 		params.comments ? "yes" : "no",
+		"--get_sub_comment",
+		params.subComments ? "yes" : "no",
+		"--max_comments_count_singlenotes",
+		String(params.maxComments),
 	];
 	if (options.cookies) args.push("--cookies", String(options.cookies));
+	if (params.crawlType === "detail" && params.specifiedId) args.push("--specified_id", params.specifiedId);
+	if (params.crawlType === "creator" && params.creatorId) args.push("--creator_id", params.creatorId);
+	if (params.ipProxy) {
+		args.push("--enable_ip_proxy", "yes");
+		if (params.ipProxyProvider) args.push("--ip_proxy_provider_name", params.ipProxyProvider);
+		if (params.ipProxyCount) args.push("--ip_proxy_pool_count", String(params.ipProxyCount));
+	}
+	if (params.saveOption !== "jsonl") {
+		pushLog(state, `提示：保存格式为 ${params.saveOption} 时，面板无法解析成条目表格，结果请到输出目录查看`);
+	}
 
 	const child = spawn(config.mediacrawlerPython, args, {
 		cwd: dir,
@@ -355,6 +380,25 @@ function startMediaCrawler(options, config) {
 	return { id };
 }
 
+function stamp() {
+	const d = new Date();
+	const p = (n) => String(n).padStart(2, "0");
+	return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+}
+
+function safeLabel(text) {
+	const cleaned = String(text || "")
+		.replace(/[^0-9A-Za-z\u4e00-\u9fa5._-]+/g, "_")
+		.replace(/^_+|_+$/g, "");
+	return cleaned.slice(0, 40) || "run";
+}
+
+function makeJobDir(root, engine, label) {
+	const dir = join(root, `${engine}-${safeLabel(label)}-${stamp()}`);
+	mkdirSync(dir, { recursive: true });
+	return dir;
+}
+
 function readLocalConfig() {
 	try {
 		const file = join(HERE, "plugin.local.json");
@@ -398,26 +442,44 @@ function startJob(options, config) {
 		solveCloudflare: Boolean(options.solveCloudflare),
 		networkIdle: Boolean(options.networkIdle),
 		waitSelector: options.waitSelector || "",
+		wait: Number(options.wait) || 0,
 		proxy: options.proxy || "",
 		impersonate: options.impersonate || "chrome",
+		useragent: options.useragent || "",
+		locale: options.locale || "",
+		timezoneId: options.timezoneId || "",
+		headers: options.headers || "",
+		cookies: options.cookies || "",
+		http3: Boolean(options.http3),
+		retries: Number(options.retries) || 0,
+		retryDelay: Number(options.retryDelay) || 0,
+		disableResources: Boolean(options.disableResources),
+		blockAds: Boolean(options.blockAds),
+		blockWebrtc: Boolean(options.blockWebrtc),
+		hideCanvas: Boolean(options.hideCanvas),
+		pierceShadow: Boolean(options.pierceShadow),
+		realChrome: Boolean(options.realChrome),
+		loadDom: options.loadDom !== false,
+		mainContentOnly: options.mainContentOnly !== false,
 		maxPages: Number(options.maxPages) || 5,
 		follow: Boolean(options.follow),
 		concurrency: Number(options.concurrency) || 4,
+		concurrencyPerDomain: Number(options.concurrencyPerDomain) || 0,
+		downloadDelay: Number(options.downloadDelay) || 0,
+		respectRobots: Boolean(options.respectRobots),
 		images: Boolean(options.images),
-		imageLimit: Math.min(60, Math.max(1, Number(options.imageLimit) || 20)),
+		imageLimit: Math.min(200, Math.max(1, Number(options.imageLimit) || 20)),
+		imageSelector: options.imageSelector || "",
 	};
 	const state = makeState(params);
 	state.id = id;
 
-	if (params.images) {
-		try {
-			const dir = join(config.downloadRoot, id);
-			mkdirSync(dir, { recursive: true });
-			state.downloadDir = dir;
-		} catch (error) {
-			state.downloadDir = "";
-			pushLog(state, `无法创建下载目录：${error.message}`);
-		}
+	try {
+		const label = new URL(params.url.includes("://") ? params.url : "https://" + params.url).hostname;
+		state.downloadDir = makeJobDir(config.outputRoot, "scrapling", label);
+	} catch (error) {
+		state.downloadDir = "";
+		pushLog(state, `无法创建输出目录：${error.message}`);
 	}
 
 	const child = spawn(config.python, ["-X", "utf8", RUNNER], {
@@ -490,7 +552,7 @@ function startJob(options, config) {
 			JSON.stringify({
 				...params,
 				executablePath: config.chrome,
-				downloadDir: state.downloadDir,
+				outputDir: state.downloadDir,
 			}),
 		);
 		child.stdin.end();
@@ -548,6 +610,7 @@ export function apply(ctx, config = {}) {
 		python: config.python || process.env.SCRAPLING_PYTHON || local.python || defaultPython(),
 		chrome: config.chrome || process.env.SCRAPLING_CHROME || local.chrome || defaultChrome(),
 		downloadRoot: config.downloadRoot || local.downloadRoot || join(dshHome(), "scrapling-downloads"),
+		outputRoot: config.outputRoot || local.outputRoot || join(dshHome(), "scrapling-downloads"),
 		mediacrawlerPython:
 			config.mediacrawlerPython ||
 			process.env.MEDIACRAWLER_PYTHON ||
@@ -610,6 +673,7 @@ export function apply(ctx, config = {}) {
 							chromeReady: existsSync(settings.chrome),
 							runnerReady: existsSync(RUNNER),
 							busy: Boolean(activeId),
+							outputRoot: settings.outputRoot,
 							mediacrawler: {
 								dir: settings.mediacrawlerDir,
 								dirReady: Boolean(settings.mediacrawlerDir) && existsSync(join(settings.mediacrawlerDir, "main.py")),
@@ -636,13 +700,14 @@ export function apply(ctx, config = {}) {
 					if (method === "GET" && sub === "/file") {
 						const jobId = url.searchParams.get("job") || "";
 						const name = url.searchParams.get("name") || "";
-						if (!/^job-[a-z0-9]+$/i.test(jobId) || !name || /[\\/]/.test(name)) {
+						const job = JOBS.get(jobId);
+						if (!job || !name || !/^(images\/)?[A-Za-z0-9._-]+$/.test(name)) {
 							json(res, 400, { error: "参数不合法" });
 							return;
 						}
-						const dir = resolve(settings.downloadRoot, jobId);
+						const dir = resolve(job.state.downloadDir || "");
 						const file = resolve(dir, name);
-						if (!file.startsWith(dir)) {
+						if (!job.state.downloadDir || !file.startsWith(dir)) {
 							json(res, 400, { error: "路径越界" });
 							return;
 						}

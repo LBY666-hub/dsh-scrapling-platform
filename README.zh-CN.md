@@ -95,7 +95,8 @@ python -m venv "$DSH_HOME/.venvs/scrapling"
   config:
     python: '/自定义/.venvs/scrapling/bin/python'   # 默认：<DSH_HOME>/.venvs/scrapling
     chrome: '/自定义/chrome'                        # 默认自动探测；留空则用 Scrapling 自带 Chromium
-    downloadRoot: '/自定义/下载目录'                 # 默认：<DSH_HOME>/scrapling-downloads
+    outputRoot: '/自定义/输出目录'                    # 默认：<DSH_HOME>/scrapling-downloads
+    mediacrawlerDir: '/路径/MediaCrawler-main'      # 只有用 MediaCrawler 引擎时需要
 ```
 
 ### 5. 重启并打开
@@ -137,6 +138,31 @@ python -m venv "$DSH_HOME/.venvs/scrapling"
 4. MediaCrawler 的输出会实时进 **日志** 页签；跑完或点「停止」后，它写出的 JSONL 会被解析成 **数据** 表格。
 
 MediaCrawler 采用 **NON-COMMERCIAL LEARNING LICENSE 1.1**，使用前请先读它的 LICENSE。
+
+## 结果保存到哪
+
+每次任务都会在 `outputRoot` 下新建一个文件夹：
+
+```
+<outputRoot>/<引擎>-<标签>-<时间戳>/
+├── 正文.md | 正文.txt | 正文.html     # Scrapling 提取的正文
+├── items.jsonl                       # 命中的元素 / 整站条目
+├── meta.json                         # URL、状态码、选择器、数量、时间
+└── images/                           # 下载的图片
+```
+
+MediaCrawler 会把自己的 `*_contents_*.jsonl`（或按保存格式生成 csv/excel/sqlite）写进同一目录，
+面板对 JSONL 会解析成「数据」表格。
+
+## 参数
+
+**Scrapling 基础**：URL、模式、CSS 选择器、输出格式、超时、代理、图片下载（张数与选择器）。
+**高级**（折叠区里）：浏览器指纹、HTTP/3、重试次数与间隔、自定义请求头、Cookie、User-Agent、
+语言、时区、跳过资源、屏蔽广告、禁止 WebRTC、Canvas 加噪、穿透 Shadow DOM、使用本机 Chrome、
+等待 DOM、只取正文、额外等待；整站模式另有：最多页数、并发、单域名并发、请求间隔、robots.txt。
+
+**MediaCrawler**：平台、关键词、抓取类型（搜索/详情/创作者）、详情或创作者 ID、登录方式（含 Cookie）、
+起始页、评论/二级评论/每篇评论数、并发、保存格式、IP 代理（服务商与池大小）、无头。
 
 ## 用法
 
