@@ -863,6 +863,16 @@ export function apply(ctx, config = {}) {
 						return;
 					}
 
+					if (method === "POST" && sub === "/clear") {
+						if (activeId) {
+							json(res, 409, { error: "任务运行中，先停止再清空" });
+							return;
+						}
+						lastId = null;
+						json(res, 200, { ok: true });
+						return;
+					}
+
 					if (method === "POST" && sub === "/cancel") {
 						json(res, 200, stopJob());
 						return;

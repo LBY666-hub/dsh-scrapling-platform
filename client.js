@@ -1194,6 +1194,7 @@ window.__ModuleLoader__.load({
 				maxResults: 5,
 			});
 			const [job, setJob] = useState(null);
+			const [restorable, setRestorable] = useState(null);
 			const [env, setEnv] = useState(null);
 			const [notice, setNotice] = useState(null);
 			const [starting, setStarting] = useState(false);
@@ -1222,11 +1223,19 @@ window.__ModuleLoader__.load({
 						if (alive) setEnv(data);
 					})
 					.catch(() => {});
-				refresh();
+				// Open clean: a finished job is only offered as "restore", never shown by default.
+				fetch(API + "/state", { cache: "no-store" })
+					.then((response) => response.json())
+					.then((data) => {
+						if (!alive || !data || !data.job) return;
+						if (data.job.status === "running") setJob(data.job);
+						else setRestorable(data.job);
+					})
+					.catch(() => {});
 				return () => {
 					alive = false;
 				};
-			}, [refresh]);
+			}, []);
 
 			const running = job && job.status === "running";
 
@@ -1268,6 +1277,19 @@ window.__ModuleLoader__.load({
 				try {
 					await fetch(API + "/cancel", { method: "POST" });
 					await refresh();
+				} catch (error) {
+					/* ignore */
+				}
+			};
+
+			const clear = async () => {
+				if (running) return;
+				setJob(null);
+				setRestorable(null);
+				setNotice(null);
+				setTab("data");
+				try {
+					await fetch(API + "/clear", { method: "POST" });
 				} catch (error) {
 					/* ignore */
 				}
@@ -1371,6 +1393,9 @@ window.__ModuleLoader__.load({
 									text: envText,
 									tone: envBad ? C.warn : C.ok,
 								})
+							: null,
+						job || restorable
+							? h(Button, { onClick: clear, disabled: running }, "清空")
 							: null,
 					),
 
@@ -1885,7 +1910,13 @@ window.__ModuleLoader__.load({
 							h(
 								"div",
 								{ style: { display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" } },
-								h(StatCard, { label: "页面", value: (job && job.pages ? job.pages.length : job && job.stats ? job.stats.pages : 0) }),
+								h(StatCard, {
+									label: "页面",
+									value: Math.max(
+										job && job.pages ? job.pages.length : 0,
+										job && job.stats ? job.stats.pages || 0 : 0,
+									),
+								}),
 								h(StatCard, { label: "条目", value: job && job.items ? job.items.length : job && job.stats ? job.stats.items : 0 }),
 								h(StatCard, { label: "命中", value: job ? job.hitsCount || (job.hits ? job.hits.length : 0) : 0 }),
 								h(StatCard, { label: "耗时", value: elapsed ? elapsed.toFixed(1) + "s" : "—" }),
@@ -1954,9 +1985,41 @@ window.__ModuleLoader__.load({
 											: tab === "pages"
 												? h(PagesTab, { job })
 												: h(LogTab, { job, scrollRef: logRef })
-								: h(Empty, {
-										text: "在左侧填好 URL 和选择器，点「开始抓取」。\n运行中会实时显示页面、条目、命中与日志。",
-									}),
+								: h(
+										"div",
+										null,
+										h(Empty, {
+											text: "在左侧填好参数，点开始。\n运行中会实时显示页面、条目、命中与日志。",
+										}),
+										restorable
+											? h(
+													"div",
+													{ style: { textAlign: "center", marginTop: -18 } },
+													h(
+														Button,
+														{
+															onClick: () => {
+																setJob(restorable);
+																setRestorable(null);
+															},
+														},
+														"载入上次结果",
+													),
+													h(
+														"div",
+														{ style: { marginTop: 6, fontSize: 11, color: C.sub } },
+														(restorable.params && restorable.params.engine === "mediacrawler"
+															? "上次：MediaCrawler "
+															: restorable.params && restorable.params.engine === "deepseek"
+																? "上次：DeepSeek "
+																: "上次：Scrapling ") +
+															((restorable.params &&
+																(restorable.params.url || restorable.params.keywords || restorable.params.query)) ||
+																""),
+													),
+												)
+											: null,
+									),
 						),
 					),
 				),
