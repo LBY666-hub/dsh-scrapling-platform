@@ -1302,6 +1302,7 @@ window.__ModuleLoader__.load({
 			const [job, setJob] = useState(null);
 			const [restorable, setRestorable] = useState(null);
 			const [history, setHistory] = useState([]);
+			const [loadedHistory, setLoadedHistory] = useState(false);
 			const [presets, setPresets] = useState(() => {
 				try {
 					return JSON.parse(localStorage.getItem("dsh-scrapling-presets") || "{}") || {};
@@ -1374,6 +1375,7 @@ window.__ModuleLoader__.load({
 			const start = async () => {
 				setStarting(true);
 				setNotice(null);
+				setLoadedHistory(false);
 				try {
 					const response = await fetch(API + "/run", {
 						method: "POST",
@@ -1407,6 +1409,7 @@ window.__ModuleLoader__.load({
 				if (running) return;
 				setJob(null);
 				setRestorable(null);
+				setLoadedHistory(false);
 				setNotice(null);
 				setTab("data");
 				try {
@@ -1428,12 +1431,27 @@ window.__ModuleLoader__.load({
 					if (data && data.job) {
 						setJob(data.job);
 						setRestorable(null);
+						setLoadedHistory(true);
 						setTab("data");
 					} else {
 						setNotice({ kind: "error", text: (data && data.error) || "载入失败" });
 					}
 				} catch (error) {
 					setNotice({ kind: "error", text: String(error && error.message ? error.message : error) });
+				}
+			};
+
+			const backToHistory = async () => {
+				setJob(null);
+				setLoadedHistory(false);
+				setNotice(null);
+				setTab("data");
+				try {
+					const response = await fetch(API + "/history", { cache: "no-store" });
+					const data = await response.json();
+					if (data && data.items) setHistory(data.items);
+				} catch (error) {
+					/* ignore */
 				}
 			};
 
@@ -1529,12 +1547,19 @@ window.__ModuleLoader__.load({
 							),
 						),
 						h("div", { style: { flex: 1 } }),
-						Pill({ text: statusText(job ? job.status : "idle"), tone: statusTone(job ? job.status : "idle"), pulse: running }),
+						Pill({
+							text: loadedHistory ? "历史记录" : statusText(job ? job.status : "idle"),
+							tone: loadedHistory ? C.warn : statusTone(job ? job.status : "idle"),
+							pulse: running,
+						}),
 						env
 							? h(Pill, {
 									text: envText,
 									tone: envBad ? C.warn : C.ok,
 								})
+							: null,
+						job && !running
+							? h(Button, { onClick: backToHistory }, "← 返回历史")
 							: null,
 						job || restorable
 							? h(Button, { onClick: clear, disabled: running }, "清空")
