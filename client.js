@@ -1007,6 +1007,21 @@ window.__ModuleLoader__.load({
 					{ style: { marginTop: 10, fontSize: 11, color: C.sub, lineHeight: 1.6 } },
 					"结果保存到：" + ((env && env.outputRoot) || "（未配置）"),
 				),
+
+				h(
+					"div",
+					{ style: { display: "flex", gap: 8, marginTop: 16 } },
+					h(
+						Button,
+						{
+							kind: "primary",
+							onClick: props.start,
+							disabled: props.starting || props.running || !String(form.keywords || "").trim(),
+						},
+						props.starting ? "启动中…" : "开始抓取",
+					),
+					h(Button, { kind: "danger", onClick: props.stop, disabled: !props.running }, "停止"),
+				),
 			);
 		}
 
@@ -1708,7 +1723,15 @@ window.__ModuleLoader__.load({
 								h(Button, { kind: "danger", onClick: stop, disabled: !running }, "停止"),
 							),
 						)
-						: h(MediaCrawlerForm, { form, patch, env }),
+						: h(MediaCrawlerForm, {
+								form,
+								patch,
+								env,
+								start,
+								stop,
+								running,
+								starting,
+							}),
 
 						// ---------- visualization ----------
 						h(
