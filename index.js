@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -409,6 +409,132 @@ function readLocalConfig() {
 	return {};
 }
 
+function writeText(dir, name, text) {
+	if (!dir) return "";
+	try {
+		mkdirSync(dir, { recursive: true });
+		const file = join(dir, name);
+		writeFileSync(file, text == null ? "" : text, "utf8");
+		return file;
+	} catch {
+		return "";
+	}
+}
+
+function writeJsonlFile(dir, name, rows) {
+	const body = (rows || []).map((row) => JSON.stringify(row)).join("\n");
+	return writeText(dir, name, body ? body + "\n" : "");
+}
+
+function startDeepSeek(options, config) {
+	const web = config.web;
+	if (!web) {
+		return { error: "当前 DSH 没有可用的网页服务（ctx.web），DeepSeek 引擎不可用" };
+	}
+	const query = String(options.query || "").trim();
+	const url = String(options.url || "").trim();
+	if (!query && !url) return { error: "请填写关键词或 URL" };
+
+	const id = `job-${Date.now().toString(36)}`;
+	const params = {
+		engine: "deepseek",
+		mode: query ? "search" : "fetch",
+		query,
+		url,
+		maxResults: Math.min(20, Math.max(1, Number(options.maxResults) || 5)),
+	};
+	const state = makeState(params);
+	state.id = id;
+	state.stage = "fetch";
+	try {
+		state.downloadDir = makeJobDir(config.outputRoot, "deepseek", query || url);
+	} catch (error) {
+		pushLog(state, `无法创建输出目录：${error.message}`);
+	}
+
+	const controller = new AbortController();
+	const job = { id, child: null, controller, state, buffer: "", stderr: "" };
+	JOBS.set(id, job);
+	activeId = id;
+	lastId = id;
+	pushLog(state, query ? `DeepSeek 搜索：${query}` : `DeepSeek 抓取：${url}`);
+
+	(async () => {
+		const started = now();
+		try {
+			if (query) {
+				const result = await web.search({ query, maxResults: params.maxResults }, controller.signal);
+				const sources = (result && result.sources) || [];
+				state.items = sources.map((source, index) => ({
+					序号: index + 1,
+					标题: source.title || "",
+					链接: source.url || "",
+					摘要: source.snippet || "",
+					时间: source.publishedAt || "",
+				}));
+				state.stats.items = state.items.length;
+				state.stats.pages = state.items.length;
+				pushLog(state, `搜索返回 ${state.items.length} 条结果`);
+				writeJsonlFile(state.downloadDir, "search.jsonl", state.items);
+				if (result && result.content) writeText(state.downloadDir, "摘要.md", result.content);
+			} else {
+				const result = await web.fetch({ url }, controller.signal);
+				const status = Number(result && result.statusCode) || 0;
+				const body = (result && result.body) || { kind: "text", content: "" };
+				state.pages.push({ url: (result && result.url) || url, status, ms: now() - started, at: now() });
+				state.markdown = clipText(body.content || "", 60000);
+				state.stats.pages = 1;
+				pushLog(state, `HTTP ${status}，正文 ${(body.content || "").length} 字符`);
+				writeText(state.downloadDir, body.kind === "html" ? "正文.html" : "正文.md", body.content || "");
+			}
+			writeText(
+				state.downloadDir,
+				"meta.json",
+				JSON.stringify(
+					{
+						engine: "deepseek",
+						mode: params.mode,
+						query: params.query,
+						url: params.url,
+						results: state.items.length,
+						finishedAt: new Date().toISOString(),
+					},
+					null,
+					2,
+				),
+			);
+			state.status = "done";
+			state.stage = "done";
+			state.finishedAt = now();
+			state.stats.elapsed = Math.round((state.finishedAt - started) / 100) / 10;
+			if (state.downloadDir) pushLog(state, `结果已保存到 ${state.downloadDir}`);
+			pushLog(state, "完成");
+		} catch (error) {
+			state.finishedAt = now();
+			if (controller.signal.aborted) {
+				state.status = "cancelled";
+				state.stage = "cancelled";
+				pushLog(state, "任务已手动停止");
+			} else {
+				state.status = "error";
+				state.stage = "error";
+				state.error = `${error && error.message ? error.message : error}`;
+				pushLog(state, `失败：${state.error}`);
+			}
+		} finally {
+			if (activeId === id) activeId = null;
+			trimJobs();
+		}
+	})();
+
+	return { id };
+}
+
+function clipText(text, limit) {
+	const value = String(text || "");
+	return value.length <= limit ? value : value.slice(0, limit) + "\n\n…（内容过长，已截断）";
+}
+
 function startJob(options, config) {
 	if (activeId) {
 		const running = JOBS.get(activeId);
@@ -416,6 +542,9 @@ function startJob(options, config) {
 	}
 	if (options && options.engine === "mediacrawler") {
 		return startMediaCrawler(options, config);
+	}
+	if (options && options.engine === "deepseek") {
+		return startDeepSeek(options, config);
 	}
 	if (!options || typeof options.url !== "string" || !options.url.trim()) {
 		return { error: "请填写要抓取的 URL" };
@@ -568,7 +697,8 @@ function stopJob() {
 	const job = JOBS.get(activeId);
 	if (!job) return { ok: false, error: "任务早已结束" };
 	try {
-		job.child.kill();
+		if (job.child) job.child.kill();
+		if (job.controller) job.controller.abort();
 	} catch {
 		/* ignore */
 	}
@@ -611,6 +741,7 @@ export function apply(ctx, config = {}) {
 		chrome: config.chrome || process.env.SCRAPLING_CHROME || local.chrome || defaultChrome(),
 		downloadRoot: config.downloadRoot || local.downloadRoot || join(dshHome(), "scrapling-downloads"),
 		outputRoot: config.outputRoot || local.outputRoot || join(dshHome(), "scrapling-downloads"),
+		web: ctx.get("web"),
 		mediacrawlerPython:
 			config.mediacrawlerPython ||
 			process.env.MEDIACRAWLER_PYTHON ||
@@ -674,6 +805,7 @@ export function apply(ctx, config = {}) {
 							runnerReady: existsSync(RUNNER),
 							busy: Boolean(activeId),
 							outputRoot: settings.outputRoot,
+							deepseek: { ready: Boolean(settings.web) },
 							mediacrawler: {
 								dir: settings.mediacrawlerDir,
 								dirReady: Boolean(settings.mediacrawlerDir) && existsSync(join(settings.mediacrawlerDir, "main.py")),

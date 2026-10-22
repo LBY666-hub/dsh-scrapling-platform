@@ -1028,6 +1028,112 @@ window.__ModuleLoader__.load({
 			);
 		}
 
+		const DS_MODES = [
+			{ value: "search", label: "关键词搜索" },
+			{ value: "fetch", label: "网页抓取" },
+		];
+
+		function DeepSeekForm(props) {
+			const form = props.form;
+			const patch = props.patch;
+			const env = props.env;
+			const ready = Boolean(env && env.deepseek && env.deepseek.ready);
+			const mode = form.dsMode || "search";
+			const hasInput = mode === "search" ? String(form.query || "").trim() : String(form.dsUrl || "").trim();
+			return h(
+				"div",
+				{ style: Object.assign({}, card, { flex: "0 1 340px", minWidth: 300 }) },
+				h("div", { style: { fontSize: 13, fontWeight: 700, marginBottom: 12 } }, "DeepSeek 网页参数"),
+
+				!ready
+					? h(
+							"div",
+							{
+								style: {
+									marginBottom: 12,
+									padding: "9px 12px",
+									borderRadius: 9,
+									fontSize: 11.5,
+									lineHeight: 1.6,
+									color: C.warn,
+									background: "color-mix(in srgb, " + C.warn + " 10%, transparent)",
+									border: "1px solid color-mix(in srgb, " + C.warn + " 30%, transparent)",
+								},
+							},
+							"当前 DSH 未提供网页服务（ctx.web），这个引擎不可用。",
+						)
+					: null,
+
+				h(
+					Field,
+					{ label: "任务类型", hint: "搜索=给关键词拿结果列表；抓取=给一个 URL 拿正文。" },
+					h(Select, {
+						value: mode,
+						onChange: (value) => patch("dsMode", value),
+						options: DS_MODES,
+					}),
+				),
+
+				mode === "search"
+					? h(
+							Field,
+							{ label: "关键词", hint: "DeepSeek 自研搜索，支持 site: 等语法。" },
+							h(TextInput, {
+								value: form.query || "",
+								placeholder: "DeepSeek V4 发布",
+								onChange: (value) => patch("query", value),
+							}),
+						)
+					: h(
+							Field,
+							{ label: "URL", hint: "DeepSeek 侧抓取并转成 Markdown，不做浏览器渲染。" },
+							h(TextInput, {
+								value: form.dsUrl || "",
+								placeholder: "https://example.com/article",
+								onChange: (value) => patch("dsUrl", value),
+							}),
+						),
+
+				mode === "search"
+					? h(
+							Field,
+							{ label: "结果条数", hint: "1–20，条数不影响计费（按次计费）。" },
+							h(TextInput, {
+								value: String(form.maxResults || 5),
+								onChange: (value) => patch("maxResults", Number(value) || 1),
+							}),
+						)
+					: null,
+
+				h(
+					"div",
+					{ style: { marginTop: 6, fontSize: 11, color: C.sub, lineHeight: 1.6 } },
+					"不消耗本地浏览器与代理；按 DeepSeek 官方计费（当前 DSH 内调用暂不计费）。",
+				),
+
+				h(
+					"div",
+					{ style: { marginTop: 10, fontSize: 11, color: C.sub, lineHeight: 1.6 } },
+					"结果保存到：" + ((env && env.outputRoot) || "（未配置）"),
+				),
+
+				h(
+					"div",
+					{ style: { display: "flex", gap: 8, marginTop: 16 } },
+					h(
+						Button,
+						{
+							kind: "primary",
+							onClick: props.start,
+							disabled: props.starting || props.running || !hasInput,
+						},
+						props.starting ? "启动中…" : "开始",
+					),
+					h(Button, { kind: "danger", onClick: props.stop, disabled: !props.running }, "停止"),
+				),
+			);
+		}
+
 		function Panel() {
 			const [form, setForm] = useState({
 				engine: "scrapling",
@@ -1082,6 +1188,10 @@ window.__ModuleLoader__.load({
 				ipProxy: false,
 				ipProxyProvider: "",
 				ipProxyCount: 0,
+				dsMode: "search",
+				query: "",
+				dsUrl: "",
+				maxResults: 5,
 			});
 			const [job, setJob] = useState(null);
 			const [env, setEnv] = useState(null);
@@ -1174,7 +1284,9 @@ window.__ModuleLoader__.load({
 			const engineReady = env
 				? form.engine === "mediacrawler"
 					? Boolean(env.mediacrawler && env.mediacrawler.dirReady && env.mediacrawler.pythonReady)
-					: Boolean(env.pythonReady && env.chromeReady)
+					: form.engine === "deepseek"
+						? Boolean(env.deepseek && env.deepseek.ready)
+						: Boolean(env.pythonReady && env.chromeReady)
 				: true;
 			const envBad = Boolean(env) && !engineReady;
 			const envText = !env
@@ -1183,9 +1295,11 @@ window.__ModuleLoader__.load({
 					? "环境就绪"
 					: form.engine === "mediacrawler"
 						? "MediaCrawler 未就绪"
-						: env.pythonReady
-							? "Chrome 未找到"
-							: "Python 未找到";
+						: form.engine === "deepseek"
+							? "网页服务不可用"
+							: env.pythonReady
+								? "Chrome 未找到"
+								: "Python 未找到";
 
 			const tabs = [
 				{ key: "data", label: job && job.items && job.items.length ? "数据 (" + job.items.length + ")" : "数据" },
@@ -1284,6 +1398,7 @@ window.__ModuleLoader__.load({
 						[
 							{ key: "scrapling", label: "Scrapling 网页", hint: "任意网址" },
 							{ key: "mediacrawler", label: "MediaCrawler 社媒", hint: "关键词搜内容" },
+							{ key: "deepseek", label: "DeepSeek 网页", hint: "免登录、免代理" },
 						].map((item) =>
 							h(
 								"button",
@@ -1726,15 +1841,25 @@ window.__ModuleLoader__.load({
 								h(Button, { kind: "danger", onClick: stop, disabled: !running }, "停止"),
 							),
 						)
-						: h(MediaCrawlerForm, {
-								form,
-								patch,
-								env,
-								start,
-								stop,
-								running,
-								starting,
-							}),
+						: form.engine === "mediacrawler"
+							? h(MediaCrawlerForm, {
+									form,
+									patch,
+									env,
+									start,
+									stop,
+									running,
+									starting,
+								})
+							: h(DeepSeekForm, {
+									form,
+									patch,
+									env,
+									start,
+									stop,
+									running,
+									starting,
+								}),
 
 						// ---------- visualization ----------
 						h(

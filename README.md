@@ -127,6 +127,18 @@ The workbench drives two projects, switchable at the top of the form:
 |---|---|---|
 | **Scrapling** | a URL (+ CSS selector) | any web page: articles, docs, listings, images |
 | **MediaCrawler** | keywords | social platforms: XHS, Douyin, Kuaishou, Bilibili, Weibo, Tieba, Zhihu |
+| **DeepSeek** | keywords or a URL | fast, login-free search and page reading via DSH's hosted web service |
+
+### Using DeepSeek
+
+No local browser, proxy, or login. It calls DSH's own `ctx.web` service:
+
+- **Search** — keywords in, a result list out (title / URL / snippet), saved as `search.jsonl`.
+- **Fetch** — one URL in, clean text or HTML out, saved as `正文.md` / `正文.html`.
+
+Trade-offs: no CSS selector, no JavaScript rendering, no images, and the provider's rate
+limits (Fetch 25 QPS, Search 100 QPS) apply. It is billed per call by DeepSeek once the
+free period in DSH ends.
 
 ### Using MediaCrawler
 

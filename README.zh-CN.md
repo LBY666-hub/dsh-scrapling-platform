@@ -123,6 +123,17 @@ python -m venv "$DSH_HOME/.venvs/scrapling"
 |---|---|---|
 | **Scrapling** | 一个 URL（+ CSS 选择器） | 任意网页：文章、文档、列表、图片 |
 | **MediaCrawler** | 关键词 | 社媒平台：小红书、抖音、快手、B 站、微博、贴吧、知乎 |
+| **DeepSeek** | 关键词或 URL | 免登录的快速搜索与正文抓取，走 DSH 自带的网页服务 |
+
+### 使用 DeepSeek
+
+不需要本地浏览器、代理和登录，直接调用 DSH 的 `ctx.web` 服务：
+
+- **搜索** —— 给关键词，返回结果列表（标题 / 链接 / 摘要），存成 `search.jsonl`
+- **抓取** —— 给一个 URL，返回干净的正文或 HTML，存成 `正文.md` / `正文.html`
+
+代价与限制：不能用 CSS 选择器、不执行 JavaScript、不下载图片，并且受服务商限流
+（抓取 25 QPS、搜索 100 QPS）。DSH 内的免费期结束后按次计费。
 
 ### 使用 MediaCrawler
 
