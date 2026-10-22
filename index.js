@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -409,6 +409,40 @@ function readLocalConfig() {
 	return {};
 }
 
+function readHistory(root, limit) {
+	const entries = [];
+	try {
+		for (const name of readdirSync(root)) {
+			const dir = join(root, name);
+			let meta = null;
+			try {
+				meta = JSON.parse(readFileSync(join(dir, "meta.json"), "utf8"));
+			} catch {
+				continue;
+			}
+			let mtime = 0;
+			try {
+				mtime = statSync(dir).mtimeMs;
+			} catch {
+				/* ignore */
+			}
+			entries.push({
+				name,
+				dir,
+				engine: meta.engine || "scrapling",
+				mode: meta.mode || "",
+				target: meta.finalUrl || meta.url || meta.query || meta.keywords || "",
+				results: meta.results || meta.items || meta.hits || 0,
+				finishedAt: meta.finishedAt || "",
+				mtime,
+			});
+		}
+	} catch {
+		/* output root missing */
+	}
+	return entries.sort((a, b) => b.mtime - a.mtime).slice(0, limit);
+}
+
 function writeText(dir, name, text) {
 	if (!dir) return "";
 	try {
@@ -427,7 +461,8 @@ function writeJsonlFile(dir, name, rows) {
 }
 
 function startDeepSeek(options, config) {
-	const web = config.web;
+	// Resolve the service at call time: other plugins may register `web` after this one loads.
+	const web = (config.getWeb && config.getWeb()) || config.web;
 	if (!web) {
 		return { error: "当前 DSH 没有可用的网页服务（ctx.web），DeepSeek 引擎不可用" };
 	}
@@ -599,6 +634,7 @@ function startJob(options, config) {
 		images: Boolean(options.images),
 		imageLimit: Math.min(200, Math.max(1, Number(options.imageLimit) || 20)),
 		imageSelector: options.imageSelector || "",
+		fields: options.fields || "",
 	};
 	const state = makeState(params);
 	state.id = id;
@@ -742,6 +778,7 @@ export function apply(ctx, config = {}) {
 		downloadRoot: config.downloadRoot || local.downloadRoot || join(dshHome(), "scrapling-downloads"),
 		outputRoot: config.outputRoot || local.outputRoot || join(dshHome(), "scrapling-downloads"),
 		web: ctx.get("web"),
+		getWeb: () => ctx.get("web"),
 		mediacrawlerPython:
 			config.mediacrawlerPython ||
 			process.env.MEDIACRAWLER_PYTHON ||
@@ -805,7 +842,7 @@ export function apply(ctx, config = {}) {
 							runnerReady: existsSync(RUNNER),
 							busy: Boolean(activeId),
 							outputRoot: settings.outputRoot,
-							deepseek: { ready: Boolean(settings.web) },
+							deepseek: { ready: Boolean(settings.getWeb && settings.getWeb()) },
 							mediacrawler: {
 								dir: settings.mediacrawlerDir,
 								dirReady: Boolean(settings.mediacrawlerDir) && existsSync(join(settings.mediacrawlerDir, "main.py")),
@@ -813,6 +850,12 @@ export function apply(ctx, config = {}) {
 								pythonReady: existsSync(settings.mediacrawlerPython),
 							},
 						});
+						return;
+					}
+
+					if (method === "GET" && sub === "/history") {
+						const limit = Math.min(50, Math.max(1, Number(url.searchParams.get("limit")) || 20));
+						json(res, 200, { items: readHistory(settings.outputRoot, limit) });
 						return;
 					}
 
