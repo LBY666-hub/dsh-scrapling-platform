@@ -142,6 +142,37 @@ def collect_hits(page, selector):
     return hits
 
 
+def parse_fields(cfg):
+    raw = (cfg.get("fields") or "").strip()
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+        if isinstance(data, dict) and data:
+            return {str(key): str(value) for key, value in data.items()}
+    except Exception:
+        emit("log", msg="字段映射不是合法 JSON，已忽略")
+    return None
+
+
+def extract_fields(page, fields, container_selector):
+    roots = page.css(container_selector) if container_selector else [page]
+    rows = []
+    for index, root in enumerate(roots[:200]):
+        row = {"序号": index + 1}
+        for name, selector in fields.items():
+            try:
+                if "::" in selector:
+                    row[name] = root.css(selector).get() or ""
+                else:
+                    found = root.css(selector)
+                    row[name] = (found[0].get_all_text(strip=True) if found else "") or ""
+            except Exception:
+                row[name] = ""
+        rows.append(row)
+    return rows
+
+
 def run_single(cfg):
     from scrapling.fetchers import Fetcher
 
@@ -188,6 +219,13 @@ def run_single(cfg):
     if hits:
         emit("hits", items=hits, count=len(hits))
         emit("log", msg="选择器命中 %d 个元素" % len(hits))
+    fields = parse_fields(cfg)
+    rows = []
+    if fields:
+        rows = extract_fields(page, fields, selector)
+        for row in rows:
+            emit("item", data=row)
+        emit("log", msg="字段映射产出 %d 行" % len(rows))
 
     if output == "text":
         body = extract_text(page, selector)
@@ -200,7 +238,8 @@ def run_single(cfg):
 
     extension = {"text": ".txt", "html": ".html"}.get(output, ".md")
     content_path = write_text_file(cfg, "正文" + extension, body)
-    items_path = write_jsonl(cfg, "items.jsonl", hits) if hits else ""
+    rows_out = rows if rows else hits
+    items_path = write_jsonl(cfg, "items.jsonl", rows_out) if rows_out else ""
     write_meta(
         cfg,
         {
@@ -212,6 +251,7 @@ def run_single(cfg):
             "selector": selector,
             "output": output,
             "hits": len(hits),
+            "rows": len(rows),
             "contentFile": content_path,
             "itemsFile": items_path,
             "finishedAt": time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -281,6 +321,13 @@ def run_browser(cfg):
     hits = collect_hits(page, selector)
     if hits:
         emit("hits", items=hits, count=len(hits))
+    fields = parse_fields(cfg)
+    rows = []
+    if fields:
+        rows = extract_fields(page, fields, selector)
+        for row in rows:
+            emit("item", data=row)
+        emit("log", msg="字段映射产出 %d 行" % len(rows))
     if output == "text":
         body = extract_text(page, selector)
     elif output == "html":
@@ -292,7 +339,8 @@ def run_browser(cfg):
 
     extension = {"text": ".txt", "html": ".html"}.get(output, ".md")
     content_path = write_text_file(cfg, "正文" + extension, body)
-    items_path = write_jsonl(cfg, "items.jsonl", hits) if hits else ""
+    rows_out = rows if rows else hits
+    items_path = write_jsonl(cfg, "items.jsonl", rows_out) if rows_out else ""
     write_meta(
         cfg,
         {
@@ -304,6 +352,7 @@ def run_browser(cfg):
             "selector": selector,
             "output": output,
             "hits": len(hits),
+            "rows": len(rows),
             "contentFile": content_path,
             "itemsFile": items_path,
             "finishedAt": time.strftime("%Y-%m-%d %H:%M:%S"),

@@ -217,6 +217,13 @@ function stripAnsi(text) {
 	return text.replace(/\u001b\[[0-9;]*m/g, "");
 }
 
+function noteProgress(state, line) {
+	const match = line.match(/page[:：]\s*(\d+)/i) || line.match(/第\s*(\d+)\s*页/);
+	if (!match) return;
+	const page = Number(match[1]);
+	if (page > (state.stats.pages || 0)) state.stats.pages = page;
+}
+
 function startMediaCrawler(options, config) {
 	const dir = config.mediacrawlerDir;
 	if (!dir || !existsSync(join(dir, "main.py"))) {
@@ -326,6 +333,7 @@ function startMediaCrawler(options, config) {
 			job.buffer = job.buffer.slice(index + 1);
 			if (line) {
 				if (state.stage === "launch") state.stage = "fetch";
+				noteProgress(state, line);
 				pushLog(state, line.slice(0, 500));
 			}
 			index = job.buffer.indexOf("\n");
@@ -338,6 +346,7 @@ function startMediaCrawler(options, config) {
 		job.stderr = (job.stderr + text).slice(-4000);
 		if (text) {
 			if (state.stage === "launch") state.stage = "fetch";
+			noteProgress(state, text);
 			pushLog(state, text.slice(0, 500));
 		}
 	});
@@ -357,8 +366,24 @@ function startMediaCrawler(options, config) {
 			if (items.length) {
 				state.items = items;
 				state.stats.items = items.length;
-				state.stats.pages = items.length;
+				if (!state.stats.pages) state.stats.pages = items.length;
 			}
+			writeText(
+				workDir,
+				"meta.json",
+				JSON.stringify(
+					{
+						engine: "mediacrawler",
+						mode: params.crawlType,
+						platform: params.platform,
+						keywords: params.keywords,
+						results: items.length,
+						finishedAt: new Date().toISOString(),
+					},
+					null,
+					2,
+				),
+			);
 			state.stats.elapsed = Math.round((state.finishedAt - state.startedAt) / 100) / 10;
 			if (code === 0) {
 				state.status = "done";
@@ -856,6 +881,77 @@ export function apply(ctx, config = {}) {
 					if (method === "GET" && sub === "/history") {
 						const limit = Math.min(50, Math.max(1, Number(url.searchParams.get("limit")) || 20));
 						json(res, 200, { items: readHistory(settings.outputRoot, limit) });
+						return;
+					}
+
+					if (method === "GET" && sub === "/load") {
+						const target = url.searchParams.get("dir") || "";
+						const root = resolve(settings.outputRoot);
+						const dir = resolve(target);
+						if (!target || !dir.startsWith(root) || !existsSync(join(dir, "meta.json"))) {
+							json(res, 404, { error: "找不到该历史记录" });
+							return;
+						}
+						let meta = {};
+						try {
+							meta = JSON.parse(readFileSync(join(dir, "meta.json"), "utf8")) || {};
+						} catch {
+							meta = {};
+						}
+						let items = [];
+						try {
+							for (const name of readdirSync(dir)) {
+								if (!name.endsWith(".jsonl")) continue;
+								const text = readFileSync(join(dir, name), "utf8");
+								for (const line of text.split(/\r?\n/)) {
+									if (!line.trim()) continue;
+									try {
+										items.push(JSON.parse(line));
+									} catch {
+										/* skip */
+									}
+									if (items.length >= MAX_ITEMS) break;
+								}
+								if (items.length >= MAX_ITEMS) break;
+							}
+						} catch {
+							items = [];
+						}
+						let markdown = "";
+						for (const name of ["正文.md", "正文.txt", "正文.html", "摘要.md"]) {
+							const file = join(dir, name);
+							if (!existsSync(file)) continue;
+							try {
+								markdown = readFileSync(file, "utf8").slice(0, 60000);
+								break;
+							} catch {
+								/* ignore */
+							}
+						}
+						json(res, 200, {
+							job: {
+								id: "history",
+								status: "done",
+								stage: "done",
+								startedAt: 0,
+								finishedAt: 0,
+								params: meta,
+								logs: [{ ts: 0, msg: `已载入历史记录：${dir}` }],
+								pages: [],
+								items,
+								hits: [],
+								hitsCount: 0,
+								images: [],
+								markdown,
+								stats: {
+									pages: meta.results || items.length,
+									items: items.length,
+									bytes: 0,
+									elapsed: 0,
+								},
+								error: null,
+							},
+						});
 						return;
 					}
 

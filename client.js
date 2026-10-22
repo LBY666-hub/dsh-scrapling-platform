@@ -341,16 +341,102 @@ window.__ModuleLoader__.load({
 			);
 		}
 
+		function toCsv(columns, rows) {
+			const escape = (value) => {
+				const text = String(value == null ? "" : value);
+				return /[",\n]/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text;
+			};
+			return [columns.map(escape).join(",")]
+				.concat(rows.map((row) => columns.map((key) => escape(row[key])).join(",")))
+				.join("\n");
+		}
+
 		function DataTab(props) {
 			const job = props.job;
+			const [filter, setFilter] = useState("");
+			const [sort, setSort] = useState({ key: null, dir: 1 });
+
+			let rows = [];
+			let columns = [];
 			if (job.items && job.items.length) {
-				const columns = [];
-				for (const row of job.items.slice(0, 100)) {
-					for (const key of Object.keys(row || {})) {
-						if (!columns.includes(key) && columns.length < 6) columns.push(key);
+				rows = job.items.map((row) => row || {});
+				for (const row of rows.slice(0, 50)) {
+					for (const key of Object.keys(row)) {
+						if (!columns.includes(key) && columns.length < 8) columns.push(key);
 					}
 				}
-				return h(
+			} else if (job.hits && job.hits.length) {
+				rows = job.hits.map((hit) => ({
+					序号: hit.index,
+					文本: hit.text || "",
+					标签: hit.tag || "",
+					链接: hit.href || "",
+				}));
+				columns = ["序号", "文本", "标签", "链接"];
+			}
+
+			if (!rows.length) {
+				return h(Empty, {
+					text:
+						job.status === "running"
+							? "正在抓取，命中结果会实时出现在这里"
+							: "还没有抓取结果。在上方填写参数后点开始。",
+				});
+			}
+
+			const keyword = filter.trim().toLowerCase();
+			let view = keyword
+				? rows.filter((row) => columns.some((key) => String(row[key] ?? "").toLowerCase().includes(keyword)))
+				: rows.slice();
+			if (sort.key) {
+				view.sort((a, b) => {
+					const left = a[sort.key] ?? "";
+					const right = b[sort.key] ?? "";
+					const numeric = Number(left) - Number(right);
+					const compare =
+						!Number.isNaN(numeric) && String(left) !== "" && String(right) !== ""
+							? numeric
+							: String(left).localeCompare(String(right), "zh-CN");
+					return compare * sort.dir;
+				});
+			}
+			view = view.slice(0, 300);
+
+			const download = () => {
+				try {
+					const blob = new Blob(["\ufeff" + toCsv(columns, view)], { type: "text/csv;charset=utf-8" });
+					const url = URL.createObjectURL(blob);
+					const link = document.createElement("a");
+					link.href = url;
+					link.download = "scrapling-result.csv";
+					link.click();
+					setTimeout(() => URL.revokeObjectURL(url), 2000);
+				} catch (error) {
+					/* ignore */
+				}
+			};
+
+			return h(
+				"div",
+				null,
+				h(
+					"div",
+					{ style: { display: "flex", gap: 8, alignItems: "center", marginBottom: 8 } },
+					h("input", {
+						type: "text",
+						value: filter,
+						placeholder: "过滤当前结果…",
+						onChange: (event) => setFilter(event.target.value),
+						style: Object.assign({}, inputStyle, { height: 30, flex: 1, fontSize: 12 }),
+					}),
+					h(
+						"span",
+						{ style: { fontSize: 11, color: C.sub, whiteSpace: "nowrap" } },
+						`${view.length} / ${rows.length}`,
+					),
+					h(Button, { onClick: download }, "导出 CSV"),
+				),
+				h(
 					"div",
 					{ style: { overflow: "auto", maxHeight: 420 } },
 					h(
@@ -367,19 +453,25 @@ window.__ModuleLoader__.load({
 										"th",
 										{
 											key,
+											onClick: () =>
+												setSort((current) =>
+													current.key === key ? { key, dir: -current.dir } : { key, dir: 1 },
+												),
 											style: {
 												position: "sticky",
 												top: 0,
 												background: C.layer2,
-												color: C.sub,
+												color: sort.key === key ? C.text : C.sub,
 												fontWeight: 600,
 												textAlign: "left",
 												padding: "7px 10px",
 												borderBottom: "1px solid " + C.border,
 												whiteSpace: "nowrap",
+												cursor: "pointer",
+												userSelect: "none",
 											},
 										},
-										key,
+										key + (sort.key === key ? (sort.dir > 0 ? " ↑" : " ↓") : ""),
 									),
 								),
 							),
@@ -387,7 +479,7 @@ window.__ModuleLoader__.load({
 						h(
 							"tbody",
 							null,
-							job.items.slice(0, 100).map((row, index) =>
+							view.map((row, index) =>
 								h(
 									"tr",
 									{ key: index, style: { borderBottom: "1px solid " + C.border } },
@@ -414,58 +506,8 @@ window.__ModuleLoader__.load({
 							),
 						),
 					),
-				);
-			}
-			if (job.hits && job.hits.length) {
-				return h(
-					"div",
-					{ style: { display: "flex", flexDirection: "column", gap: 6, maxHeight: 420, overflow: "auto" } },
-					job.hits.map((hit) =>
-						h(
-							"div",
-							{
-								key: hit.index,
-								style: {
-									display: "flex",
-									gap: 10,
-									padding: "8px 10px",
-									borderRadius: 8,
-									background: C.layer2,
-									border: "1px solid " + C.border,
-									fontSize: 12,
-								},
-							},
-							h("span", { style: { color: C.sub, fontFamily: mono, flex: "none" } }, "#" + hit.index),
-							h(
-								"span",
-								{ style: { color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
-								hit.text || "(空)",
-							),
-							hit.href
-								? h(
-										"span",
-										{
-											style: {
-												marginLeft: "auto",
-												color: C.brand,
-												fontSize: 11,
-												flex: "none",
-												maxWidth: 220,
-												overflow: "hidden",
-												textOverflow: "ellipsis",
-												whiteSpace: "nowrap",
-											},
-										},
-										hit.href,
-									)
-								: null,
-						),
-					),
-				);
-			}
-			return h(Empty, {
-				text: job.status === "running" ? "正在抓取，命中结果会实时出现在这里" : "还没有抓取结果。在上方填写参数后点「开始抓取」。",
-			});
+				),
+			);
 		}
 
 		function MarkdownTab(props) {
@@ -1134,6 +1176,69 @@ window.__ModuleLoader__.load({
 			);
 		}
 
+		function HistoryPanel(props) {
+			const items = props.items || [];
+			if (!items.length) {
+				return h(Empty, { text: "还没有历史记录。跑一次任务后，结果会出现在这里。" });
+			}
+			return h(
+				"div",
+				{ style: { display: "flex", flexDirection: "column", gap: 6, maxHeight: 420, overflow: "auto" } },
+				items.map((item) =>
+					h(
+						"div",
+						{
+							key: item.dir,
+							style: {
+								padding: "9px 11px",
+								borderRadius: 9,
+								background: C.layer2,
+								border: "1px solid " + C.border,
+							},
+						},
+						h(
+							"div",
+							{
+								style: {
+									fontSize: 12,
+									fontWeight: 600,
+									color: C.text,
+									overflow: "hidden",
+									textOverflow: "ellipsis",
+									whiteSpace: "nowrap",
+								},
+								title: item.dir,
+							},
+							(item.engine || "scrapling") + " · " + (item.target || item.name),
+						),
+						h(
+							"div",
+							{ style: { marginTop: 2, fontSize: 11, color: C.sub } },
+							`${item.results || 0} 条 · ${item.finishedAt || new Date(item.mtime).toLocaleString()}`,
+						),
+						h(
+							"div",
+							{ style: { display: "flex", gap: 6, marginTop: 6 } },
+							h(Button, { onClick: () => props.onLoad(item) }, "载入"),
+							h(
+								Button,
+								{
+									onClick: () => {
+										try {
+											navigator.clipboard.writeText(item.dir);
+										} catch (error) {
+											/* ignore */
+										}
+									},
+								},
+								"复制路径",
+							),
+						),
+					),
+				),
+			);
+		}
+
 		function Panel() {
 			const [form, setForm] = useState({
 				engine: "scrapling",
@@ -1171,6 +1276,7 @@ window.__ModuleLoader__.load({
 				loadDom: true,
 				mainContentOnly: true,
 				imageSelector: "",
+				fields: "",
 				respectRobots: false,
 				downloadDelay: 0,
 				concurrencyPerDomain: 0,
@@ -1195,6 +1301,15 @@ window.__ModuleLoader__.load({
 			});
 			const [job, setJob] = useState(null);
 			const [restorable, setRestorable] = useState(null);
+			const [history, setHistory] = useState([]);
+			const [presets, setPresets] = useState(() => {
+				try {
+					return JSON.parse(localStorage.getItem("dsh-scrapling-presets") || "{}") || {};
+				} catch (error) {
+					return {};
+				}
+			});
+			const [presetName, setPresetName] = useState("");
 			const [env, setEnv] = useState(null);
 			const [notice, setNotice] = useState(null);
 			const [starting, setStarting] = useState(false);
@@ -1221,6 +1336,12 @@ window.__ModuleLoader__.load({
 					.then((response) => response.json())
 					.then((data) => {
 						if (alive) setEnv(data);
+					})
+					.catch(() => {});
+				fetch(API + "/history", { cache: "no-store" })
+					.then((response) => response.json())
+					.then((data) => {
+						if (alive && data && data.items) setHistory(data.items);
 					})
 					.catch(() => {});
 				// Open clean: a finished job is only offered as "restore", never shown by default.
@@ -1290,8 +1411,29 @@ window.__ModuleLoader__.load({
 				setTab("data");
 				try {
 					await fetch(API + "/clear", { method: "POST" });
+					const response = await fetch(API + "/history", { cache: "no-store" });
+					const data = await response.json();
+					if (data && data.items) setHistory(data.items);
 				} catch (error) {
 					/* ignore */
+				}
+			};
+
+			const loadHistory = async (item) => {
+				try {
+					const response = await fetch(API + "/load?dir=" + encodeURIComponent(item.dir), {
+						cache: "no-store",
+					});
+					const data = await response.json();
+					if (data && data.job) {
+						setJob(data.job);
+						setRestorable(null);
+						setTab("data");
+					} else {
+						setNotice({ kind: "error", text: (data && data.error) || "载入失败" });
+					}
+				} catch (error) {
+					setNotice({ kind: "error", text: String(error && error.message ? error.message : error) });
 				}
 			};
 
@@ -1416,6 +1558,63 @@ window.__ModuleLoader__.load({
 								notice.text,
 							)
 						: null,
+
+					h(
+						"div",
+						{ style: { display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" } },
+						h(Select, {
+							value: "",
+							onChange: (name) => {
+								if (name && presets[name]) setForm(Object.assign({}, form, presets[name]));
+							},
+							options: [{ value: "", label: "套用预设…" }].concat(
+								Object.keys(presets).map((name) => ({ value: name, label: name })),
+							),
+						}),
+						h("input", {
+							type: "text",
+							value: presetName,
+							placeholder: "预设名",
+							onChange: (event) => setPresetName(event.target.value),
+							style: Object.assign({}, inputStyle, { width: 140, height: 30, fontSize: 12 }),
+						}),
+						h(
+							Button,
+							{
+								onClick: () => {
+									const name = presetName.trim();
+									if (!name) return;
+									const next = Object.assign({}, presets, { [name]: form });
+									setPresets(next);
+									setPresetName("");
+									try {
+										localStorage.setItem("dsh-scrapling-presets", JSON.stringify(next));
+									} catch (error) {
+										/* ignore */
+									}
+								},
+							},
+							"保存预设",
+						),
+						h(
+							Button,
+							{
+								onClick: () => {
+									const name = presetName.trim();
+									if (!name || !presets[name]) return;
+									const next = Object.assign({}, presets);
+									delete next[name];
+									setPresets(next);
+									try {
+										localStorage.setItem("dsh-scrapling-presets", JSON.stringify(next));
+									} catch (error) {
+										/* ignore */
+									}
+								},
+							},
+							"删除",
+						),
+					),
 
 					h(
 						"div",
@@ -1797,6 +1996,19 @@ window.__ModuleLoader__.load({
 										onChange: (value) => patch("imageSelector", value),
 									}),
 								),
+								h(
+									Field,
+									{
+										label: "字段映射",
+										hint: 'JSON 对象，按选择器抽结构化字段：{"标题":".title::text","链接":"a::attr(href)"}。以容器选择器为每一行。',
+									},
+									h(TextArea, {
+										value: form.fields || "",
+										placeholder: '{"标题":".title::text","价格":".price::text"}',
+										rows: 3,
+										onChange: (value) => patch("fields", value),
+									}),
+								),
 								h(Toggle, {
 									label: "跳过图片/样式等资源",
 									hint: "只下 HTML，明显更快；页面布局可能异常。",
@@ -1988,34 +2200,30 @@ window.__ModuleLoader__.load({
 								: h(
 										"div",
 										null,
-										h(Empty, {
-											text: "在左侧填好参数，点开始。\n运行中会实时显示页面、条目、命中与日志。",
-										}),
+										h(
+											"div",
+											{ style: { fontSize: 12.5, fontWeight: 600, marginBottom: 8, color: C.text } },
+											"历史记录",
+										),
+										h(HistoryPanel, { items: history, onLoad: loadHistory }),
 										restorable
 											? h(
 													"div",
-													{ style: { textAlign: "center", marginTop: -18 } },
-													h(
-														Button,
-														{
-															onClick: () => {
-																setJob(restorable);
-																setRestorable(null);
-															},
-														},
-														"载入上次结果",
-													),
+													{ style: { marginTop: 10, fontSize: 11, color: C.sub } },
+													"上次任务未在历史中？点下方按钮直接恢复。",
 													h(
 														"div",
-														{ style: { marginTop: 6, fontSize: 11, color: C.sub } },
-														(restorable.params && restorable.params.engine === "mediacrawler"
-															? "上次：MediaCrawler "
-															: restorable.params && restorable.params.engine === "deepseek"
-																? "上次：DeepSeek "
-																: "上次：Scrapling ") +
-															((restorable.params &&
-																(restorable.params.url || restorable.params.keywords || restorable.params.query)) ||
-																""),
+														{ style: { marginTop: 6 } },
+														h(
+															Button,
+															{
+																onClick: () => {
+																	setJob(restorable);
+																	setRestorable(null);
+																},
+															},
+															"恢复上次会话",
+														),
 													),
 												)
 											: null,
