@@ -749,8 +749,177 @@ window.__ModuleLoader__.load({
 			);
 		}
 
+		function TextArea(props) {
+			return h("textarea", {
+				value: props.value,
+				placeholder: props.placeholder,
+				rows: props.rows || 3,
+				onChange: (event) => props.onChange(event.target.value),
+				style: Object.assign({}, inputStyle, {
+					height: "auto",
+					padding: "8px 10px",
+					resize: "vertical",
+					fontFamily: mono,
+					fontSize: 11.5,
+					lineHeight: 1.5,
+				}),
+			});
+		}
+
+		const MC_PLATFORMS = [
+			{ value: "xhs", label: "小红书" },
+			{ value: "dy", label: "抖音" },
+			{ value: "ks", label: "快手" },
+			{ value: "bili", label: "B 站" },
+			{ value: "wb", label: "微博" },
+			{ value: "tieba", label: "百度贴吧" },
+			{ value: "zhihu", label: "知乎" },
+		];
+
+		function MediaCrawlerForm(props) {
+			const form = props.form;
+			const patch = props.patch;
+			const env = props.env;
+			const mc = env && env.mediacrawler;
+			const ready = Boolean(mc && mc.dirReady && mc.pythonReady);
+			return h(
+				"div",
+				{ style: Object.assign({}, card, { flex: "0 1 340px", minWidth: 300 }) },
+				h("div", { style: { fontSize: 13, fontWeight: 700, marginBottom: 12 } }, "MediaCrawler 参数"),
+
+				!ready
+					? h(
+							"div",
+							{
+								style: {
+									marginBottom: 12,
+									padding: "9px 12px",
+									borderRadius: 9,
+									fontSize: 11.5,
+									lineHeight: 1.6,
+									color: C.warn,
+									background: "color-mix(in srgb, " + C.warn + " 10%, transparent)",
+									border: "1px solid color-mix(in srgb, " + C.warn + " 30%, transparent)",
+								},
+							},
+							"环境未就绪：",
+							h("div", null, "项目目录：" + ((mc && mc.dir) || "未找到")),
+							h("div", null, "Python：" + ((mc && mc.python) || "未配置")),
+						)
+					: null,
+
+				h(
+					Field,
+					{ label: "平台", hint: "不同平台的登录方式、可用字段都不一样。" },
+					h(Select, {
+						value: form.platform,
+						onChange: (value) => patch("platform", value),
+						options: MC_PLATFORMS,
+					}),
+				),
+
+				h(
+					Field,
+					{ label: "关键词", hint: "多个关键词用英文逗号分隔，例如：红米手机,小米14。" },
+					h(TextInput, {
+						value: form.keywords,
+						placeholder: "红米手机",
+						onChange: (value) => patch("keywords", value),
+					}),
+				),
+
+				h(
+					Field,
+					{ label: "抓取类型", hint: "search=按关键词搜；detail=按 ID 抓详情；creator=按创作者主页抓。" },
+					h(Select, {
+						value: form.crawlType,
+						onChange: (value) => patch("crawlType", value),
+						options: [
+							{ value: "search", label: "关键词搜索" },
+							{ value: "detail", label: "指定内容 ID" },
+							{ value: "creator", label: "指定创作者" },
+						],
+					}),
+				),
+
+				h(
+					Field,
+					{ label: "登录方式", hint: "扫码最省事：会弹出浏览器窗口，用 App 扫一下即可。" },
+					h(Select, {
+						value: form.loginType,
+						onChange: (value) => patch("loginType", value),
+						options: [
+							{ value: "qrcode", label: "扫码登录" },
+							{ value: "cookie", label: "粘贴 Cookie" },
+							{ value: "phone", label: "手机号" },
+						],
+					}),
+				),
+
+				form.loginType === "cookie"
+					? h(
+							Field,
+							{ label: "Cookie", hint: "浏览器开发者工具 → Network → 任一请求 → 复制整段 Cookie。" },
+							h(TextArea, {
+								value: form.cookies,
+								placeholder: "粘贴 Cookie 字符串",
+								rows: 4,
+								onChange: (value) => patch("cookies", value),
+							}),
+						)
+					: null,
+
+				form.crawlType !== "search"
+					? h(
+							Field,
+							{
+								label: form.crawlType === "detail" ? "内容 ID / URL" : "创作者 ID / URL",
+								hint: "多个用英文逗号分隔。",
+							},
+							h(TextArea, {
+								value: form.crawlType === "detail" ? form.specifiedId || "" : form.creatorId || "",
+								placeholder: "多个用逗号分隔",
+								rows: 3,
+								onChange: (value) =>
+									patch(form.crawlType === "detail" ? "specifiedId" : "creatorId", value),
+							}),
+						)
+					: null,
+
+				h(Toggle, {
+					label: "无头运行",
+					hint: "扫码登录时必须关掉，否则看不到二维码窗口。",
+					value: form.headless,
+					onChange: (value) => patch("headless", value),
+				}),
+
+				h(Toggle, {
+					label: "抓取评论",
+					hint: "会额外请求评论接口，速度明显变慢；不需要就别开。",
+					value: form.comments,
+					onChange: (value) => patch("comments", value),
+				}),
+
+				h(
+					Field,
+					{ label: "并发数", hint: "同时处理几个请求，调大容易被平台限流。" },
+					h(TextInput, {
+						value: String(form.concurrency),
+						onChange: (value) => patch("concurrency", Number(value) || 1),
+					}),
+				),
+
+				h(
+					"div",
+					{ style: { marginTop: 8, fontSize: 11, color: C.sub, lineHeight: 1.6 } },
+					"结果以 JSONL 写入任务目录，面板会解析成条目表格。",
+				),
+			);
+		}
+
 		function Panel() {
 			const [form, setForm] = useState({
+				engine: "scrapling",
 				url: "",
 				mode: "http",
 				selector: "",
@@ -766,6 +935,12 @@ window.__ModuleLoader__.load({
 				concurrency: 4,
 				images: false,
 				imageLimit: 20,
+				platform: "xhs",
+				keywords: "",
+				crawlType: "search",
+				loginType: "qrcode",
+				cookies: "",
+				comments: false,
 			});
 			const [job, setJob] = useState(null);
 			const [env, setEnv] = useState(null);
@@ -855,7 +1030,21 @@ window.__ModuleLoader__.load({
 						: 0
 				: 0;
 
-			const envBad = env && (!env.pythonReady || !env.chromeReady);
+			const engineReady = env
+				? form.engine === "mediacrawler"
+					? Boolean(env.mediacrawler && env.mediacrawler.dirReady && env.mediacrawler.pythonReady)
+					: Boolean(env.pythonReady && env.chromeReady)
+				: true;
+			const envBad = Boolean(env) && !engineReady;
+			const envText = !env
+				? ""
+				: engineReady
+					? "环境就绪"
+					: form.engine === "mediacrawler"
+						? "MediaCrawler 未就绪"
+						: env.pythonReady
+							? "Chrome 未找到"
+							: "Python 未找到";
 
 			const tabs = [
 				{ key: "data", label: job && job.items && job.items.length ? "数据 (" + job.items.length + ")" : "数据" },
@@ -924,7 +1113,7 @@ window.__ModuleLoader__.load({
 						Pill({ text: statusText(job ? job.status : "idle"), tone: statusTone(job ? job.status : "idle"), pulse: running }),
 						env
 							? h(Pill, {
-									text: envBad ? (env.pythonReady ? "Chrome 未找到" : "Python 未找到") : "环境就绪",
+									text: envText,
 									tone: envBad ? C.warn : C.ok,
 								})
 							: null,
@@ -950,10 +1139,46 @@ window.__ModuleLoader__.load({
 
 					h(
 						"div",
+						{ style: { display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" } },
+						[
+							{ key: "scrapling", label: "Scrapling 网页", hint: "任意网址" },
+							{ key: "mediacrawler", label: "MediaCrawler 社媒", hint: "关键词搜内容" },
+						].map((item) =>
+							h(
+								"button",
+								{
+									key: item.key,
+									type: "button",
+									onClick: () => patch("engine", item.key),
+									style: {
+										display: "flex",
+										alignItems: "center",
+										gap: 6,
+										padding: "8px 14px",
+										cursor: "pointer",
+										fontSize: 12.5,
+										fontWeight: 600,
+										borderRadius: 10,
+										color: form.engine === item.key ? C.text : C.sub,
+										border: "1px solid " + (form.engine === item.key ? C.brand : C.border),
+										background:
+											form.engine === item.key
+												? "color-mix(in srgb, " + C.brand + " 12%, transparent)"
+												: C.layer1,
+									},
+								},
+								item.label,
+								h("span", { style: { fontSize: 10.5, fontWeight: 400, color: C.sub } }, item.hint),
+							),
+						),
+					),
+
+					h(
+						"div",
 						{ style: { display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" } },
 
 						// ---------- parameter form ----------
-						h(
+						form.engine === "scrapling" ? h(
 							"div",
 							{ style: Object.assign({}, card, { flex: "0 1 340px", minWidth: 300 }) },
 							h("div", { style: { fontSize: 13, fontWeight: 700, marginBottom: 12 } }, "抓取参数"),
@@ -1136,7 +1361,8 @@ window.__ModuleLoader__.load({
 								),
 								h(Button, { kind: "danger", onClick: stop, disabled: !running }, "停止"),
 							),
-						),
+						)
+						: h(MediaCrawlerForm, { form, patch, env }),
 
 						// ---------- visualization ----------
 						h(

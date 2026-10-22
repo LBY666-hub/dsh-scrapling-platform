@@ -1,7 +1,7 @@
 {
   "name": "dsh-scrapling-platform",
-  "version": "1.0.1",
-  "description": "Native Scrapling sidebar panel for DeepSeek Harness: set parameters by hand, watch crawls live, collect pages, items, text and images.",
+  "version": "1.1.0",
+  "description": "Dual-engine crawler sidebar panel for DeepSeek Harness: Scrapling for any URL, MediaCrawler for keyword search across social platforms.",
   "type": "module",
   "license": "MIT",
   "author": "LBY666-hub",

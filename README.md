@@ -118,6 +118,35 @@ Restart DSH, then click the spider icon in the left rail.
 For JS-rendered pages switch mode to **Browser**; for several pages at once switch to
 **Spider** and set *Max pages* and *Concurrency*.
 
+## Engines
+
+The workbench drives two projects, switchable at the top of the form:
+
+| Engine | Input | Best for |
+|---|---|---|
+| **Scrapling** | a URL (+ CSS selector) | any web page: articles, docs, listings, images |
+| **MediaCrawler** | keywords | social platforms: XHS, Douyin, Kuaishou, Bilibili, Weibo, Tieba, Zhihu |
+
+### Using MediaCrawler
+
+1. Clone [MediaCrawler](https://github.com/NanmiCoder/MediaCrawler) and install its dependencies
+   into its own venv (default: `<DSH_HOME>/.venvs/mediacrawler`), then
+   `python -m playwright install chromium`.
+2. Point the plugin at the checkout — either `mediacrawlerDir` in the plugin config, or a
+   `plugin.local.json` beside this package:
+
+   ```json
+   { "mediacrawlerDir": "D:\\path\\to\\MediaCrawler-main" }
+   ```
+
+3. Pick a platform, type keywords, choose login (`qrcode` needs headless **off** so you can
+   scan; `cookie` accepts a pasted cookie string), then Start.
+4. MediaCrawler's stdout streams into the **Log** tab; its JSONL output is parsed into the
+   **Data** table when the run ends or when you press Stop.
+
+MediaCrawler is licensed under **NON-COMMERCIAL LEARNING LICENSE 1.1** — read its LICENSE
+before use.
+
 ## Usage
 
 | Field | Meaning |
@@ -154,6 +183,7 @@ Results appear in tabs: **Data**, **Text**, **Images**, **Pages**, **Log**. Ever
 ## Credits
 
 - **[Scrapling](https://github.com/D4Vinci/Scrapling)** by **Karim Shoair (D4Vinci)** — the entire scraping engine this panel drives. BSD-3-Clause. This project is **not affiliated with or endorsed by** the Scrapling author.
+- **[MediaCrawler](https://github.com/NanmiCoder/MediaCrawler)** by **NanmiCoder** — the keyword crawler for social platforms. **NON-COMMERCIAL LEARNING LICENSE 1.1**; this project is not affiliated with its author either.
 - **DeepSeek Harness** team — the slot, route, and bundle APIs that make a native panel possible.
 - The `dsh-mcp-connector` community plugin — its `sidebar.panellist` + `main` registration pattern was the reference for this panel's slot wiring.
 

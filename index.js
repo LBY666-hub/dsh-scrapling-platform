@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -185,10 +185,193 @@ function trimJobs() {
 	}
 }
 
+function readJsonlItems(dir) {
+	const items = [];
+	try {
+		for (const name of readdirSync(dir)) {
+			if (!name.endsWith(".jsonl") || !name.includes("contents")) continue;
+			let text = "";
+			try {
+				text = readFileSync(join(dir, name), "utf8");
+			} catch {
+				continue;
+			}
+			for (const line of text.split(/\r?\n/)) {
+				const trimmed = line.trim();
+				if (!trimmed) continue;
+				try {
+					items.push(JSON.parse(trimmed));
+				} catch {
+					/* skip malformed line */
+				}
+				if (items.length >= MAX_ITEMS) return items;
+			}
+		}
+	} catch {
+		/* directory missing */
+	}
+	return items;
+}
+
+function stripAnsi(text) {
+	return text.replace(/\u001b\[[0-9;]*m/g, "");
+}
+
+function startMediaCrawler(options, config) {
+	const dir = config.mediacrawlerDir;
+	if (!dir || !existsSync(join(dir, "main.py"))) {
+		return {
+			error: `找不到 MediaCrawler 项目目录：${dir || "(未配置)"}。请在插件配置里设置 mediacrawlerDir，或把 MediaCrawler-main 放在任一工作区目录下`,
+		};
+	}
+	if (!existsSync(config.mediacrawlerPython)) {
+		return {
+			error: `找不到 MediaCrawler 的 Python：${config.mediacrawlerPython}。请按 README 为它建 venv，或在配置里改 mediacrawlerPython`,
+		};
+	}
+	const keywords = String(options.keywords || "").trim();
+	if (!keywords) return { error: "请填写关键词，多个用英文逗号分隔" };
+
+	const id = `job-${Date.now().toString(36)}`;
+	const params = {
+		engine: "mediacrawler",
+		platform: options.platform || "xhs",
+		keywords,
+		crawlType: options.crawlType || "search",
+		loginType: options.loginType || "qrcode",
+		headless: options.headless !== false,
+		comments: Boolean(options.comments),
+		concurrency: Number(options.concurrency) || 4,
+	};
+	const state = makeState(params);
+	state.id = id;
+	state.stage = "launch";
+
+	const workDir = join(config.downloadRoot, id);
+	try {
+		mkdirSync(workDir, { recursive: true });
+		state.downloadDir = workDir;
+	} catch (error) {
+		return { error: `无法创建结果目录：${error.message}` };
+	}
+
+	const args = [
+		"main.py",
+		"--platform",
+		params.platform,
+		"--lt",
+		params.loginType,
+		"--type",
+		params.crawlType,
+		"--keywords",
+		keywords,
+		"--save_data_option",
+		"jsonl",
+		"--save_data_path",
+		workDir,
+		"--headless",
+		params.headless ? "yes" : "no",
+		"--max_concurrency_num",
+		String(params.concurrency),
+		"--get_comment",
+		params.comments ? "yes" : "no",
+	];
+	if (options.cookies) args.push("--cookies", String(options.cookies));
+
+	const child = spawn(config.mediacrawlerPython, args, {
+		cwd: dir,
+		windowsHide: true,
+		env: { ...process.env, PYTHONIOENCODING: "utf-8", PYTHONUTF8: "1" },
+		stdio: ["ignore", "pipe", "pipe"],
+	});
+
+	const job = { id, child, state, buffer: "", stderr: "" };
+	JOBS.set(id, job);
+	activeId = id;
+	lastId = id;
+
+	pushLog(state, `MediaCrawler 启动：${params.platform} / ${params.crawlType} / ${keywords}`);
+
+	child.stdout.setEncoding("utf8");
+	child.stdout.on("data", (chunk) => {
+		job.buffer += chunk;
+		let index = job.buffer.indexOf("\n");
+		while (index !== -1) {
+			const line = stripAnsi(job.buffer.slice(0, index)).trim();
+			job.buffer = job.buffer.slice(index + 1);
+			if (line) {
+				if (state.stage === "launch") state.stage = "fetch";
+				pushLog(state, line.slice(0, 500));
+			}
+			index = job.buffer.indexOf("\n");
+		}
+	});
+
+	child.stderr.setEncoding("utf8");
+	child.stderr.on("data", (chunk) => {
+		const text = stripAnsi(chunk).trim();
+		job.stderr = (job.stderr + text).slice(-4000);
+		if (text) {
+			if (state.stage === "launch") state.stage = "fetch";
+			pushLog(state, text.slice(0, 500));
+		}
+	});
+
+	child.on("error", (error) => {
+		state.status = "error";
+		state.stage = "error";
+		state.error = `无法启动 MediaCrawler：${error.message}`;
+		state.finishedAt = now();
+		if (activeId === id) activeId = null;
+	});
+
+	child.on("close", (code) => {
+		if (state.status === "running" || state.status === "cancelled") {
+			state.finishedAt = now();
+			const items = readJsonlItems(workDir);
+			if (items.length) {
+				state.items = items;
+				state.stats.items = items.length;
+				state.stats.pages = items.length;
+			}
+			state.stats.elapsed = Math.round((state.finishedAt - state.startedAt) / 100) / 10;
+			if (code === 0) {
+				state.status = "done";
+				state.stage = "done";
+				pushLog(state, `抓取完成，共 ${items.length} 条`);
+			} else if (state.status === "cancelled") {
+				/* stopped by the user; keep whatever was collected */
+			} else {
+				state.status = "error";
+				state.stage = "error";
+				const tail = job.stderr.split("\n").slice(-6).join("\n");
+				state.error = `进程退出码 ${code}${tail ? "：" + tail : ""}`;
+			}
+		}
+		if (activeId === id) activeId = null;
+		trimJobs();
+	});
+
+	return { id };
+}
+
+function readLocalConfig() {
+	try {
+		const file = join(HERE, "plugin.local.json");
+		if (existsSync(file)) return JSON.parse(readFileSync(file, "utf8")) || {};
+	} catch {
+		/* ignore malformed local config */
+	}
+	return {};
+}
+
 function startJob(options, config) {
 	if (activeId) {
 		const running = JOBS.get(activeId);
-		return { error: `已有任务在运行（${running ? running.state.params.url : activeId}），请先停止` };
+		return { error: `已有任务在运行（${running ? running.state.params.url || running.state.params.keywords : activeId}），请先停止` };
+	}
+	if (options && options.engine === "mediacrawler") {
+		return startMediaCrawler(options, config);
 	}
 	if (!options || typeof options.url !== "string" || !options.url.trim()) {
 		return { error: "请填写要抓取的 URL" };
@@ -360,11 +543,40 @@ function statePayload(id, includeMarkdown) {
 }
 
 export function apply(ctx, config = {}) {
+	const local = readLocalConfig();
 	const settings = {
-		python: config.python || process.env.SCRAPLING_PYTHON || defaultPython(),
-		chrome: config.chrome || process.env.SCRAPLING_CHROME || defaultChrome(),
-		downloadRoot: config.downloadRoot || join(dshHome(), "scrapling-downloads"),
+		python: config.python || process.env.SCRAPLING_PYTHON || local.python || defaultPython(),
+		chrome: config.chrome || process.env.SCRAPLING_CHROME || local.chrome || defaultChrome(),
+		downloadRoot: config.downloadRoot || local.downloadRoot || join(dshHome(), "scrapling-downloads"),
+		mediacrawlerPython:
+			config.mediacrawlerPython ||
+			process.env.MEDIACRAWLER_PYTHON ||
+			local.mediacrawlerPython ||
+			join(dshHome(), ".venvs", "mediacrawler", process.platform === "win32" ? "Scripts\\python.exe" : "bin/python"),
+		mediacrawlerDir: config.mediacrawlerDir || process.env.MEDIACRAWLER_DIR || local.mediacrawlerDir || "",
 	};
+
+	// Locate a MediaCrawler checkout: explicit config first, then env, then any workspace folder.
+	if (!settings.mediacrawlerDir) {
+		try {
+			const workspaces = ctx.workspaceRegistry ? ctx.workspaceRegistry.list() : [];
+			for (const workspace of workspaces) {
+				const base = workspace.path || workspace.directory || workspace.cwd;
+				if (!base) continue;
+				const candidate = join(base, "MediaCrawler-main");
+				if (existsSync(join(candidate, "main.py"))) {
+					settings.mediacrawlerDir = candidate;
+					break;
+				}
+				if (existsSync(join(base, "main.py"))) {
+					settings.mediacrawlerDir = base;
+					break;
+				}
+			}
+		} catch {
+			/* workspace registry unavailable */
+		}
+	}
 
 	ctx.effect(() => {
 		return () => {
@@ -398,6 +610,12 @@ export function apply(ctx, config = {}) {
 							chromeReady: existsSync(settings.chrome),
 							runnerReady: existsSync(RUNNER),
 							busy: Boolean(activeId),
+							mediacrawler: {
+								dir: settings.mediacrawlerDir,
+								dirReady: Boolean(settings.mediacrawlerDir) && existsSync(join(settings.mediacrawlerDir, "main.py")),
+								python: settings.mediacrawlerPython,
+								pythonReady: existsSync(settings.mediacrawlerPython),
+							},
 						});
 						return;
 					}
@@ -461,3 +679,5 @@ export function apply(ctx, config = {}) {
 		});
 	});
 }
+
+export { readJsonlItems };

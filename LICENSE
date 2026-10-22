@@ -29,6 +29,11 @@ Copyright (c) Karim Shoair (D4Vinci), licensed under the BSD-3-Clause License.
 Scrapling is a separate project and is not bundled with this package.
 This project is not affiliated with or endorsed by the Scrapling author.
 
+The optional MediaCrawler engine drives MediaCrawler
+(https://github.com/NanmiCoder/MediaCrawler), Copyright (c) NanmiCoder,
+licensed under the NON-COMMERCIAL LEARNING LICENSE 1.1. It is not bundled
+with this package either, and this project is not affiliated with its author.
+
 This plugin is provided for learning and code study only. It must not be used
 for commercial purposes, nor for malicious activity, including request floods,
 bypassing paywalls or access controls, unlawful collection of personal data,

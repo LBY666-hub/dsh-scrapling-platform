@@ -17,3 +17,4 @@ Thumbs.db
 *.tgz
 .npmrc
 
+plugin.local.json

@@ -114,6 +114,30 @@ python -m venv "$DSH_HOME/.venvs/scrapling"
 
 需要执行 JS 的页面把模式切到 **浏览器**；要一次抓多页切到 **整站**，再设「最多页数」和「并发数」。
 
+## 双引擎
+
+工作台顶部可以在两个项目之间切换：
+
+| 引擎 | 输入 | 适合 |
+|---|---|---|
+| **Scrapling** | 一个 URL（+ CSS 选择器） | 任意网页：文章、文档、列表、图片 |
+| **MediaCrawler** | 关键词 | 社媒平台：小红书、抖音、快手、B 站、微博、贴吧、知乎 |
+
+### 使用 MediaCrawler
+
+1. 克隆 [MediaCrawler](https://github.com/NanmiCoder/MediaCrawler)，把依赖装进它自己的 venv
+   （默认 `<DSH_HOME>/.venvs/mediacrawler`），再执行 `python -m playwright install chromium`。
+2. 告诉插件项目在哪：插件配置里的 `mediacrawlerDir`，或本包旁边的 `plugin.local.json`：
+
+   ```json
+   { "mediacrawlerDir": "D:\\路径\\MediaCrawler-main" }
+   ```
+
+3. 选平台、填关键词、选登录方式（`扫码` 要把「无头运行」关掉才看得到二维码；`Cookie` 直接粘贴），点开始。
+4. MediaCrawler 的输出会实时进 **日志** 页签；跑完或点「停止」后，它写出的 JSONL 会被解析成 **数据** 表格。
+
+MediaCrawler 采用 **NON-COMMERCIAL LEARNING LICENSE 1.1**，使用前请先读它的 LICENSE。
+
 ## 用法
 
 | 参数 | 含义 |
@@ -150,6 +174,7 @@ python -m venv "$DSH_HOME/.venvs/scrapling"
 ## 致谢
 
 - **[Scrapling](https://github.com/D4Vinci/Scrapling)** 作者 **Karim Shoair（D4Vinci）** —— 本面板驱动的全部抓取能力都来自它，BSD-3-Clause。本项目**与 Scrapling 作者无隶属或背书关系**。
+- **[MediaCrawler](https://github.com/NanmiCoder/MediaCrawler)** 作者 **NanmiCoder** —— 社媒关键词抓取引擎，**NON-COMMERCIAL LEARNING LICENSE 1.1**；本项目与其作者同样无隶属关系。
 - **DeepSeek Harness** 团队 —— 槽位、路由与 bundle API 让原生面板成为可能。
 - 社区插件 `dsh-mcp-connector` —— 其 `sidebar.panellist` + `main` 的注册方式是本面板槽位接线的参考。
 
